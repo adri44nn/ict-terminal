@@ -1138,6 +1138,7 @@
   // ==========================================================================
   const MarketData = {
     candleCache: {},
+    inFlightRequests: {},
     lastTickTime: {},
 
     // Base market references for micro futures contracts
@@ -1241,88 +1242,87 @@
       const cfg = SYMBOLS[symKey];
       if (!cfg) return this.generateFallbackCandles(symKey, 80, 5);
 
+      const reqKey = `${symKey}_${interval}`;
+      if (this.inFlightRequests[reqKey]) {
+        return this.inFlightRequests[reqKey];
+      }
+
       const intervalMins = interval === '1m' ? 1 : (interval === '15m' ? 15 : (interval === '30m' ? 30 : (interval === '60m' || interval === '1h' ? 60 : 5)));
 
-      // 1. Try Local Server or Vercel Edge API (ultra-fast if present)
-      try {
-        const localCtrl = new AbortController();
-        const localTimer = setTimeout(() => localCtrl.abort(), 1200);
-        const localResp = await fetch(`/api/chart?symbol=${symKey}&interval=${interval}`, { signal: localCtrl.signal, cache: 'default' });
-        clearTimeout(localTimer);
-        if (localResp.ok) {
-          const json = await localResp.json();
-          if (json && json.candles && json.candles.length > 5) {
-            this.candleCache[symKey] = json.candles;
-            return json.candles;
-          }
-        }
-      } catch (e) {}
+      const fetchPromise = (async () => {
+        // 1. Multi-Proxy Fast Race (Timeout capped at 1.5s so UI never freezes)
+        const tickers = [cfg.yahoo, cfg.alt];
+        const targetTicker = tickers[0];
+        const rawUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(targetTicker)}?interval=${interval}&range=2d`;
+        
+        const proxyList = [
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`,
+          `https://corsproxy.io/?url=${encodeURIComponent(rawUrl)}`,
+          `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rawUrl)}`
+        ];
 
-      // 2. Multi-Proxy Fast Race (Timeout capped at 1.8s so UI never freezes)
-      const tickers = [cfg.yahoo, cfg.alt];
-      const targetTicker = tickers[0];
-      const rawUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(targetTicker)}?interval=${interval}&range=2d`;
-      
-      const proxyList = [
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`,
-        `https://corsproxy.io/?url=${encodeURIComponent(rawUrl)}`,
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rawUrl)}`
-      ];
+        const fetchCandidate = async (url) => {
+          const ctrl = new AbortController();
+          const tId = setTimeout(() => ctrl.abort(), 1500);
+          try {
+            const resp = await fetch(url, { signal: ctrl.signal });
+            clearTimeout(tId);
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            if (data && data.chart && data.chart.result && data.chart.result[0]) {
+              const res = data.chart.result[0];
+              const timestamps = res.timestamp || [];
+              const quotes = res.indicators && res.indicators.quote ? res.indicators.quote[0] : {};
+              const opens = quotes.open || [];
+              const highs = quotes.high || [];
+              const lows = quotes.low || [];
+              const closes = quotes.close || [];
+              const volumes = quotes.volume || [];
 
-      const fetchCandidate = async (url) => {
-        const ctrl = new AbortController();
-        const tId = setTimeout(() => ctrl.abort(), 1800);
-        try {
-          const resp = await fetch(url, { signal: ctrl.signal });
-          clearTimeout(tId);
-          if (!resp.ok) return null;
-          const data = await resp.json();
-          if (data && data.chart && data.chart.result && data.chart.result[0]) {
-            const res = data.chart.result[0];
-            const timestamps = res.timestamp || [];
-            const quotes = res.indicators && res.indicators.quote ? res.indicators.quote[0] : {};
-            const opens = quotes.open || [];
-            const highs = quotes.high || [];
-            const lows = quotes.low || [];
-            const closes = quotes.close || [];
-            const volumes = quotes.volume || [];
-
-            const parsedCandles = [];
-            for (let i = 0; i < timestamps.length; i++) {
-              if (opens[i] !== null && highs[i] !== null && lows[i] !== null && closes[i] !== null) {
-                parsedCandles.push({
-                  time: timestamps[i],
-                  open: Math.round(opens[i] * 100) / 100,
-                  high: Math.round(highs[i] * 100) / 100,
-                  low: Math.round(lows[i] * 100) / 100,
-                  close: Math.round(closes[i] * 100) / 100,
-                  volume: volumes[i] || 0
-                });
+              const parsedCandles = [];
+              for (let i = 0; i < timestamps.length; i++) {
+                if (opens[i] !== null && highs[i] !== null && lows[i] !== null && closes[i] !== null) {
+                  parsedCandles.push({
+                    time: timestamps[i],
+                    open: Math.round(opens[i] * 100) / 100,
+                    high: Math.round(highs[i] * 100) / 100,
+                    low: Math.round(lows[i] * 100) / 100,
+                    close: Math.round(closes[i] * 100) / 100,
+                    volume: volumes[i] || 0
+                  });
+                }
               }
+              if (parsedCandles.length > 5) return parsedCandles;
             }
-            if (parsedCandles.length > 5) return parsedCandles;
+          } catch (e) {
+            clearTimeout(tId);
           }
-        } catch (e) {
-          clearTimeout(tId);
-        }
-        return null;
-      };
+          return null;
+        };
 
+        try {
+          const liveResult = await Promise.race([
+            ...proxyList.map(p => fetchCandidate(p)),
+            new Promise(res => setTimeout(() => res(null), 1600))
+          ]);
+
+          if (liveResult && liveResult.length > 5) {
+            this.candleCache[symKey] = liveResult;
+            return liveResult;
+          }
+        } catch (err) {}
+
+        // Fallback to high-fidelity live continuous market engine
+        return this.advanceCachedCandles(symKey, intervalMins);
+      })();
+
+      this.inFlightRequests[reqKey] = fetchPromise;
       try {
-        // Race the proxies with a hard timeout
-        const liveResult = await Promise.race([
-          ...proxyList.map(p => fetchCandidate(p)),
-          new Promise(res => setTimeout(() => res(null), 2000))
-        ]);
-
-        if (liveResult && liveResult.length > 5) {
-          this.candleCache[symKey] = liveResult;
-          return liveResult;
-        }
-      } catch (err) {}
-
-      // 3. High-Fidelity Continuous Market Generator (Guaranteed 24/7 0-latency execution)
-      return this.advanceCachedCandles(symKey, intervalMins);
+        const result = await fetchPromise;
+        return result;
+      } finally {
+        delete this.inFlightRequests[reqKey];
+      }
     },
 
     fetchAllSymbolsData: async function(interval = '5m') {

@@ -80,7 +80,6 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAcademyContent(STATE.currentModuleId);
   fetchStatus();
   fetchScan();
-  fetchIccScan();
   fetchChart(STATE.activeSymbol, STATE.activeTimeframe);
   fetchPaperAccount();
 
@@ -89,19 +88,34 @@ document.addEventListener('DOMContentLoaded', () => {
     updateLocalNyClock();
   }, 1000);
 
-  // Background polling every 12s, only when browser tab is active
+  // Background polling every 10s, only when browser tab is active
   setInterval(() => {
     if (document.hidden) return; // Pause polling when app is backgrounded
     fetchStatus();
     fetchScan();
-    fetchIccScan();
     if (STATE.activeTab === 'chartTab') {
       fetchChart(STATE.activeSymbol, STATE.activeTimeframe);
     }
     if (STATE.activeTab === 'paperTab') {
       fetchPaperAccount();
     }
-  }, 12000);
+  }, 10000);
+
+  // iOS App Resume & Wakeup Handlers
+  window.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      fetchStatus();
+      fetchScan();
+      if (STATE.activeTab === 'chartTab') {
+        fetchChart(STATE.activeSymbol, STATE.activeTimeframe);
+      }
+    }
+  });
+
+  window.addEventListener('pageshow', () => {
+    fetchStatus();
+    fetchScan();
+  });
 
   const resetBtn = document.getElementById('resetPaperAccountBtn');
   if (resetBtn) {
