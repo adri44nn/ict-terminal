@@ -680,6 +680,7 @@
               take_profit: peak,
               take_profit_1: peak,
               take_profit_2: Math.round((peak + totalRange) * 100) / 100,
+              take_profit_3: Math.round((peak + (totalRange * 2.0)) * 100) / 100,
               rr_ratio: '--'
             }
           };
@@ -792,6 +793,7 @@
               take_profit: low,
               take_profit_1: low,
               take_profit_2: Math.round((low - totalRange) * 100) / 100,
+              take_profit_3: Math.round((low - (totalRange * 2.0)) * 100) / 100,
               rr_ratio: '--'
             }
           };
