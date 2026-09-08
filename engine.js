@@ -661,9 +661,16 @@
       const tp2 = isBull ? Math.round((extreme + (totalRange * 0.618)) * 100) / 100 : Math.round((extreme - (totalRange * 0.618)) * 100) / 100;
       const tp3 = isBull ? Math.round((extreme + (totalRange * 1.272)) * 100) / 100 : Math.round((extreme - (totalRange * 1.272)) * 100) / 100;
       const entry50 = latestInd.equilibrium_50;
-      const slOrigin = origin;
+      
+      // Authentic Trades by Sci Structural SL (placed below 61.8%-70.5% OTE zone, guaranteeing 2:1+ RR to Indication Peak)
+      const oteSlBull = Math.round((origin + (totalRange * 0.25)) * 100) / 100;
+      const oteSlBear = Math.round((origin - (totalRange * 0.25)) * 100) / 100;
 
       if (n - 1 <= indEndIdx) {
+        const plannedRisk = Math.max(Math.abs(entry50 - (isBull ? oteSlBull : oteSlBear)), 1.0);
+        const plannedReward = Math.abs(tp1 - entry50);
+        const plannedRr = plannedReward / plannedRisk;
+
         return {
           phase: 'PHASE_1_INDICATION',
           phase_title: `⚡ Phase 1: Strong ${latestInd.direction} Indication Active (+${totalRange} pts)`,
@@ -679,14 +686,14 @@
             direction: latestInd.direction,
             action: 'OBSERVING / IMPULSE EXPANSION',
             entry: entry50,
-            stop_loss: slOrigin,
+            stop_loss: isBull ? oteSlBull : oteSlBear,
             take_profit: tp1,
             take_profit_1: tp1,
             take_profit_2: tp2,
             take_profit_3: tp3,
-            risk_points: Math.round(Math.abs(entry50 - slOrigin) * 100) / 100,
-            reward_points: Math.round(Math.abs(tp1 - entry50) * 100) / 100,
-            rr_ratio: `1:${(Math.abs(tp1 - entry50) / Math.max(Math.abs(entry50 - slOrigin), 0.5)).toFixed(2)}`
+            risk_points: Math.round(plannedRisk * 100) / 100,
+            reward_points: Math.round(plannedReward * 100) / 100,
+            rr_ratio: `1:${plannedRr.toFixed(2)}`
           }
         };
       }
@@ -738,21 +745,23 @@
         };
 
         const activeEntry = currPrice;
-        const activeSl = Math.round((lowestRetrace - (totalRange * 0.08)) * 100) / 100;
+        // Tight structural SL below swing pullback low
+        const activeSl = Math.round(Math.min(lowestRetrace - (totalRange * 0.04), oteSlBull) * 100) / 100;
         const risk = Math.max(Math.abs(activeEntry - activeSl), 1.0);
         const reward = Math.abs(tp1 - activeEntry);
         const rr = reward / risk;
+        const meets2to1 = rr >= 2.0;
 
-        if (isInHealthyZone && bullishReversalTrigger) {
-          const grade = rr >= 1.8 ? (retracePct >= 40.0 && retracePct <= 65.0 ? 'A+' : 'A') : 'B';
+        if (isInHealthyZone && bullishReversalTrigger && meets2to1) {
+          const grade = rr >= 2.5 ? (retracePct >= 40.0 && retracePct <= 65.0 ? 'A+' : 'A') : 'A';
           return {
             phase: 'PHASE_3_CONTINUATION',
-            phase_title: `🚀 PHASE 3: BULLISH CONTINUATION ARMED (${rr.toFixed(1)} RR)`,
+            phase_title: `🚀 PHASE 3: BULLISH CONTINUATION ARMED (1:${rr.toFixed(1)} RR)`,
             is_active_trade: true,
             direction: 'BULLISH',
             setup_grade: grade,
-            grade_desc: `ICC Grade ${grade}: Reversal Triggered out of ${retracePct}% Golden Zone. Draw on Liquidity @ ${tp1}`,
-            confluence_score: grade === 'A+' ? 100 : (grade === 'A' ? 88 : 75),
+            grade_desc: `ICC Grade ${grade}: Reversal Triggered out of ${retracePct}% Golden Zone. 1:${rr.toFixed(1)} RR to Peak TP1 (${tp1})`,
+            confluence_score: grade === 'A+' ? 100 : 88,
             indication: latestInd,
             correction: correctionInfo,
             trade_plan: {
@@ -770,13 +779,17 @@
             }
           };
         } else {
+          const plannedRisk = Math.max(Math.abs(entry50 - oteSlBull), 1.0);
+          const plannedReward = Math.abs(tp1 - entry50);
+          const plannedRr = plannedReward / plannedRisk;
+
           return {
             phase: 'PHASE_2_CORRECTION',
             phase_title: `⏳ Phase 2: Pullback in Progress (${retracePct}% Retraced)`,
             is_active_trade: false,
             direction: 'BULLISH',
             setup_grade: 'B',
-            grade_desc: `Phase 2: Retracing towards 50% Eq (${entry50}) - Target Peak TP1: ${tp1}`,
+            grade_desc: `Phase 2: Retracing into Golden Zone (50% Eq: ${entry50}) - Target Peak TP1: ${tp1} (1:${plannedRr.toFixed(1)} RR)`,
             confluence_score: isInHealthyZone ? 70 : 45,
             indication: latestInd,
             correction: correctionInfo,
@@ -785,14 +798,14 @@
               direction: 'BULLISH',
               action: 'PULLBACK IN PROGRESS',
               entry: entry50,
-              stop_loss: slOrigin,
+              stop_loss: oteSlBull,
               take_profit: tp1,
               take_profit_1: tp1,
               take_profit_2: tp2,
               take_profit_3: tp3,
-              risk_points: Math.round(Math.abs(entry50 - slOrigin) * 100) / 100,
-              reward_points: Math.round(Math.abs(tp1 - entry50) * 100) / 100,
-              rr_ratio: `1:${(Math.abs(tp1 - entry50) / Math.max(Math.abs(entry50 - slOrigin), 0.5)).toFixed(2)}`
+              risk_points: Math.round(plannedRisk * 100) / 100,
+              reward_points: Math.round(plannedReward * 100) / 100,
+              rr_ratio: `1:${plannedRr.toFixed(2)}`
             }
           };
         }
@@ -842,21 +855,23 @@
         };
 
         const activeEntry = currPrice;
-        const activeSl = Math.round((highestRetrace + (totalRange * 0.08)) * 100) / 100;
+        // Tight structural SL above swing pullback high
+        const activeSl = Math.round(Math.max(highestRetrace + (totalRange * 0.04), oteSlBear) * 100) / 100;
         const risk = Math.max(Math.abs(activeSl - activeEntry), 1.0);
         const reward = Math.abs(activeEntry - tp1);
         const rr = reward / risk;
+        const meets2to1 = rr >= 2.0;
 
-        if (isInHealthyZone && bearishReversalTrigger) {
-          const grade = rr >= 1.8 ? (retracePct >= 40.0 && retracePct <= 65.0 ? 'A+' : 'A') : 'B';
+        if (isInHealthyZone && bearishReversalTrigger && meets2to1) {
+          const grade = rr >= 2.5 ? (retracePct >= 40.0 && retracePct <= 65.0 ? 'A+' : 'A') : 'A';
           return {
             phase: 'PHASE_3_CONTINUATION',
-            phase_title: `🚀 PHASE 3: BEARISH CONTINUATION ARMED (${rr.toFixed(1)} RR)`,
+            phase_title: `🚀 PHASE 3: BEARISH CONTINUATION ARMED (1:${rr.toFixed(1)} RR)`,
             is_active_trade: true,
             direction: 'BEARISH',
             setup_grade: grade,
-            grade_desc: `ICC Grade ${grade}: Reversal Triggered out of ${retracePct}% Golden Zone. Draw on Liquidity @ ${tp1}`,
-            confluence_score: grade === 'A+' ? 100 : (grade === 'A' ? 88 : 75),
+            grade_desc: `ICC Grade ${grade}: Reversal Triggered out of ${retracePct}% Golden Zone. 1:${rr.toFixed(1)} RR to Low TP1 (${tp1})`,
+            confluence_score: grade === 'A+' ? 100 : 88,
             indication: latestInd,
             correction: correctionInfo,
             trade_plan: {
@@ -874,13 +889,17 @@
             }
           };
         } else {
+          const plannedRisk = Math.max(Math.abs(oteSlBear - entry50), 1.0);
+          const plannedReward = Math.abs(entry50 - tp1);
+          const plannedRr = plannedReward / plannedRisk;
+
           return {
             phase: 'PHASE_2_CORRECTION',
             phase_title: `⏳ Phase 2: Pullback in Progress (${retracePct}% Retraced)`,
             is_active_trade: false,
             direction: 'BEARISH',
             setup_grade: 'B',
-            grade_desc: `Phase 2: Retracing towards 50% Eq (${entry50}) - Target Low TP1: ${tp1}`,
+            grade_desc: `Phase 2: Retracing into Golden Zone (50% Eq: ${entry50}) - Target Low TP1: ${tp1} (1:${plannedRr.toFixed(1)} RR)`,
             confluence_score: isInHealthyZone ? 70 : 45,
             indication: latestInd,
             correction: correctionInfo,
@@ -889,14 +908,14 @@
               direction: 'BEARISH',
               action: 'PULLBACK IN PROGRESS',
               entry: entry50,
-              stop_loss: slOrigin,
+              stop_loss: oteSlBear,
               take_profit: tp1,
               take_profit_1: tp1,
               take_profit_2: tp2,
               take_profit_3: tp3,
-              risk_points: Math.round(Math.abs(entry50 - slOrigin) * 100) / 100,
-              reward_points: Math.round(Math.abs(entry50 - tp1) * 100) / 100,
-              rr_ratio: `1:${(Math.abs(entry50 - tp1) / Math.max(Math.abs(entry50 - slOrigin), 0.5)).toFixed(2)}`
+              risk_points: Math.round(plannedRisk * 100) / 100,
+              reward_points: Math.round(plannedReward * 100) / 100,
+              rr_ratio: `1:${plannedRr.toFixed(2)}`
             }
           };
         }
@@ -1043,18 +1062,25 @@
       let macroTp2 = activeInd ? (activeInd.direction === 'BULLISH' ? Math.round((macroTp1 + (macroRange * 0.5)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 0.5)) * 100) / 100) : currentPrice;
       let macroTp3 = activeInd ? (activeInd.direction === 'BULLISH' ? Math.round((macroTp1 + (macroRange * 1.0)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 1.0)) * 100) / 100) : currentPrice;
 
+      const isBullActive = (activeInd ? activeInd.direction : 'BULLISH') === 'BULLISH';
+      const oteMacroSl = isBullActive ? Math.round((macroOrigin + (macroRange * 0.25)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.25)) * 100) / 100;
+
       // Merge 1H Macro targets into the active trade plan
       const finalTradePlan = ltfState.trade_plan || {
         is_active: false,
         direction: activeInd ? activeInd.direction : 'NEUTRAL',
         entry: macroEq,
-        stop_loss: macroOrigin,
+        stop_loss: oteMacroSl,
         take_profit: macroTp1,
         take_profit_1: macroTp1,
         take_profit_2: macroTp2,
         take_profit_3: macroTp3,
         rr_ratio: '--'
       };
+
+      if (!finalTradePlan.stop_loss || finalTradePlan.stop_loss === macroOrigin) {
+        finalTradePlan.stop_loss = oteMacroSl;
+      }
 
       // Always anchor TP1 to the 1H/HTF Indication Extreme
       finalTradePlan.take_profit_1 = macroTp1;
@@ -1065,8 +1091,10 @@
       finalTradePlan.htf_equilibrium = macroEq;
 
       if (finalTradePlan.entry && finalTradePlan.stop_loss && finalTradePlan.take_profit_1) {
-        const risk = Math.max(Math.abs(finalTradePlan.entry - finalTradePlan.stop_loss), 0.5);
+        const risk = Math.max(Math.abs(finalTradePlan.entry - finalTradePlan.stop_loss), 1.0);
         const reward = Math.abs(finalTradePlan.take_profit_1 - finalTradePlan.entry);
+        finalTradePlan.risk_points = Math.round(risk * 100) / 100;
+        finalTradePlan.reward_points = Math.round(reward * 100) / 100;
         finalTradePlan.rr_ratio = `1:${(reward / risk).toFixed(2)}`;
       }
 
