@@ -1276,14 +1276,14 @@
 
     // Base market references for micro futures contracts (live 2026 intraday prices & 15M swing structural levels)
     BASE_SPECS: {
-      "MNQ": { basePrice: 29588.75, tick: 0.25, volAvg: 2200, swingAmp: 35.0, intradayHigh: 29645.00, intradayLow: 29520.00 },
-      "MES": { basePrice: 7704.25, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7725.00, intradayLow: 7688.00 },
-      "M2K": { basePrice: 2968.30, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2980.00, intradayLow: 2955.00 },
-      "MGC": { basePrice: 4443.40, tick: 0.10, volAvg: 1200, swingAmp: 12.0, intradayHigh: 4465.00, intradayLow: 4425.00 }
+      "MNQ": { basePrice: 29523.50, tick: 0.25, volAvg: 2200, swingAmp: 35.0, intradayHigh: 29650.00, intradayLow: 29480.00 },
+      "MES": { basePrice: 7679.00, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7725.00, intradayLow: 7670.00 },
+      "M2K": { basePrice: 2963.50, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2980.00, intradayLow: 2955.00 },
+      "MGC": { basePrice: 4399.50, tick: 0.10, volAvg: 1200, swingAmp: 12.0, intradayHigh: 4465.00, intradayLow: 4390.00 }
     },
 
     generateFallbackCandles: function(symKey, count = 80, intervalMins = 5) {
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 29588.75, tick: 0.25, volAvg: 1200, swingAmp: 12.0, intradayHigh: 29645.00, intradayLow: 29520.00 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 7679.00, tick: 0.25, volAvg: 1200, swingAmp: 12.0, intradayHigh: 7725.00, intradayLow: 7670.00 };
       const now = Math.floor(Date.now() / 1000);
       const stepSecs = intervalMins * 60;
       const startTime = now - (count * stepSecs);
@@ -1335,7 +1335,7 @@
     },
 
     advanceCachedCandles: function(symKey, intervalMins = 5) {
-      const cacheKey = 'ict_live_candles_v11_' + symKey;
+      const cacheKey = 'ict_live_candles_v12_' + symKey;
       if (!this.candleCache[symKey] || this.candleCache[symKey].length === 0) {
         try {
           const stored = localStorage.getItem(cacheKey);
