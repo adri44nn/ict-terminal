@@ -694,7 +694,7 @@ function renderIccScannerGrid(scanResults) {
               ${gradeBadgeHtml}
               <span ${biasBadge}>${d.direction || 'NEUTRAL'}</span>
             </div>
-            <span>${d.timeframe} ICC Order Flow | Current: <strong>${d.current_price}</strong></span>
+            <span>${d.timeframe || '5m'} ICC Order Flow | Current: <strong>${(d.current_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></span>
           </div>
           <div class="confluence-badge-box">
             <div class="confluence-meter ${scoreClass}">

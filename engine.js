@@ -1071,6 +1071,7 @@
       }
 
       return {
+        ...ltfState,
         symbol: symbol,
         timeframe: "5m",
         current_price: currentPrice,
@@ -1083,7 +1084,6 @@
           bull_count: bullCount,
           bear_count: bearCount
         },
-        ...ltfState,
         htf_indication: activeInd,
         trade_plan: finalTradePlan
       };
@@ -1210,16 +1210,16 @@
     inFlightRequests: {},
     lastTickTime: {},
 
-    // Base market references for micro futures contracts
+    // Base market references for micro futures contracts (current 2026 market prices)
     BASE_SPECS: {
-      "MNQ": { basePrice: 21650.00, tick: 0.25, volAvg: 1800, swingAmp: 35.0 },
-      "MES": { basePrice: 5885.00, tick: 0.25, volAvg: 2400, swingAmp: 8.5 },
-      "M2K": { basePrice: 2255.00, tick: 0.10, volAvg: 1200, swingAmp: 4.2 },
-      "MGC": { basePrice: 2785.00, tick: 0.10, volAvg: 950, swingAmp: 3.8 }
+      "MNQ": { basePrice: 29707.00, tick: 0.25, volAvg: 2200, swingAmp: 45.0 },
+      "MES": { basePrice: 7719.50, tick: 0.25, volAvg: 2800, swingAmp: 12.0 },
+      "M2K": { basePrice: 2974.00, tick: 0.10, volAvg: 1400, swingAmp: 6.5 },
+      "MGC": { basePrice: 4472.50, tick: 0.10, volAvg: 1200, swingAmp: 8.0 }
     },
 
     generateFallbackCandles: function(symKey, count = 80, intervalMins = 5) {
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 20000.0, tick: 0.25, volAvg: 1500, swingAmp: 20.0 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 4472.50, tick: 0.10, volAvg: 1200, swingAmp: 8.0 };
       const now = Math.floor(Date.now() / 1000);
       const stepSecs = intervalMins * 60;
       const startTime = now - (count * stepSecs);
@@ -1269,7 +1269,7 @@
         return this.candleCache[symKey];
       }
 
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 20000.0, tick: 0.25, volAvg: 1500, swingAmp: 20.0 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 4472.50, tick: 0.10, volAvg: 1200, swingAmp: 8.0 };
       const candles = this.candleCache[symKey];
       const last = candles[candles.length - 1];
       const now = Math.floor(Date.now() / 1000);
@@ -1319,20 +1319,16 @@
       const intervalMins = interval === '1m' ? 1 : (interval === '15m' ? 15 : (interval === '30m' ? 30 : (interval === '60m' || interval === '1h' ? 60 : 5)));
 
       const fetchPromise = (async () => {
-        // 1. Multi-Proxy Fast Race (Timeout capped at 1.5s so UI never freezes)
-        const tickers = [cfg.yahoo, cfg.alt];
-        const targetTicker = tickers[0];
-        const rawUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(targetTicker)}?interval=${interval}&range=2d`;
-        
-        const proxyList = [
-          `https://api.allorigins.win/raw?url=${encodeURIComponent(rawUrl)}`,
-          `https://corsproxy.io/?url=${encodeURIComponent(rawUrl)}`,
-          `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rawUrl)}`
+        const tickers = [cfg.yahoo, cfg.alt].filter(Boolean);
+        const proxyTemplates = [
+          (t) => `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=2d`)}`,
+          (t) => `https://corsproxy.io/?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=2d`)}`,
+          (t) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=2d`)}`
         ];
 
         const fetchCandidate = async (url) => {
           const ctrl = new AbortController();
-          const tId = setTimeout(() => ctrl.abort(), 1500);
+          const tId = setTimeout(() => ctrl.abort(), 3500);
           try {
             const resp = await fetch(url, { signal: ctrl.signal });
             clearTimeout(tId);
@@ -1369,19 +1365,32 @@
           return null;
         };
 
+        const targetUrls = [];
+        for (const t of tickers) {
+          for (const tmpl of proxyTemplates) {
+            targetUrls.push(tmpl(t));
+          }
+        }
+
         try {
           const liveResult = await Promise.race([
-            ...proxyList.map(p => fetchCandidate(p)),
-            new Promise(res => setTimeout(() => res(null), 1600))
+            ...targetUrls.map(u => fetchCandidate(u)),
+            new Promise(res => setTimeout(() => res(null), 3800))
           ]);
 
           if (liveResult && liveResult.length > 5) {
             this.candleCache[symKey] = liveResult;
+            const lastCandle = liveResult[liveResult.length - 1];
+            if (lastCandle && lastCandle.close) {
+              if (this.BASE_SPECS[symKey]) {
+                this.BASE_SPECS[symKey].basePrice = lastCandle.close;
+              }
+            }
             return liveResult;
           }
         } catch (err) {}
 
-        // Fallback to high-fidelity live continuous market engine
+        // Fallback to high-fidelity continuous market simulation anchored to latest base price
         return this.advanceCachedCandles(symKey, intervalMins);
       })();
 
