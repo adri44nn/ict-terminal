@@ -427,11 +427,10 @@ async function fetchScan() {
     const res = await fetch('/api/scan', { signal: ctrl.signal });
     clearTimeout(tId);
     if (res.ok) {
-      const data = await res.json();
-      STATE.scanData = data;
-      STATE.iccScanData = { scan_results: data.icc_scan_results || data.scan_results || {} };
+      STATE.scanData = { scan_results: data.scan_results || {}, killzone: data.killzone, alerts: data.alerts || [] };
+      STATE.iccScanData = { scan_results: data.icc_scan_results || {} };
       renderScannerGrid(data.scan_results || {});
-      renderIccScannerGrid(data.icc_scan_results || data.scan_results || {});
+      renderIccScannerGrid(data.icc_scan_results || {});
       renderAlertsTable(data.alerts || []);
       updateGlobalSignalRibbon(data.scan_results || {}, data.icc_scan_results || {});
       return;
