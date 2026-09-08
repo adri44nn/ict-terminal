@@ -711,11 +711,34 @@ function renderScannerGrid(scanResults) {
             <span class="sub">(${rewardPts.toFixed(1)} pts)</span>
           </div>
         </div>
+        <div class="contract-matrix-box">
+          <div class="matrix-title">
+            <span>📊 Contract Sizing Risk vs Reward</span>
+            <span style="color: var(--text-muted); font-size: 9px;">${sym} ($${ptMultiplier}/pt)</span>
+          </div>
+          <div class="matrix-grid">
+            <div class="matrix-tier">
+              <div class="tier-head">1 Con</div>
+              <div class="tier-loss">-$${(riskUsd * 1).toFixed(0)}</div>
+              <div class="tier-gain">+$${(rewardUsd * 1).toFixed(0)}</div>
+            </div>
+            <div class="matrix-tier active-tier">
+              <div class="tier-head">5 Cons</div>
+              <div class="tier-loss">-$${(riskUsd * 5).toFixed(0)}</div>
+              <div class="tier-gain">+$${(rewardUsd * 5).toFixed(0)}</div>
+            </div>
+            <div class="matrix-tier">
+              <div class="tier-head">10 Cons</div>
+              <div class="tier-loss">-$${(riskUsd * 10).toFixed(0)}</div>
+              <div class="tier-gain">+$${(rewardUsd * 10).toFixed(0)}</div>
+            </div>
+          </div>
+        </div>
       `;
     } else {
       riskMoneyStripHtml = `
         <div class="risk-money-strip standby">
-          <span style="color: var(--text-muted); font-size: 11px;">🛡️ Point Value: $${ptMultiplier.toFixed(2)}/pt | Risk calculated dynamically on setup trigger</span>
+          <span style="color: var(--text-muted); font-size: 11px;">🛡️ Point Multiplier: $${ptMultiplier.toFixed(2)}/pt | 1 Con / 5 Cons / 10 Cons calculated on trade trigger</span>
         </div>
       `;
     }
@@ -1075,11 +1098,34 @@ function renderIccScannerGrid(scanResults) {
                   <span class="sub">(${rewPts.toFixed(1)} pts)</span>
                 </div>
               </div>
+              <div class="contract-matrix-box">
+                <div class="matrix-title">
+                  <span>📊 Position Sizing (15M SL Risk vs TP1 Gain)</span>
+                  <span style="color: var(--text-muted); font-size: 9px;">${sym} ($${ptMult}/pt)</span>
+                </div>
+                <div class="matrix-grid">
+                  <div class="matrix-tier">
+                    <div class="tier-head">1 Con</div>
+                    <div class="tier-loss">-$${(rUsd * 1).toFixed(0)}</div>
+                    <div class="tier-gain">+$${(rewUsd * 1).toFixed(0)}</div>
+                  </div>
+                  <div class="matrix-tier active-tier">
+                    <div class="tier-head">5 Cons</div>
+                    <div class="tier-loss">-$${(rUsd * 5).toFixed(0)}</div>
+                    <div class="tier-gain">+$${(rewUsd * 5).toFixed(0)}</div>
+                  </div>
+                  <div class="matrix-tier">
+                    <div class="tier-head">10 Cons</div>
+                    <div class="tier-loss">-$${(rUsd * 10).toFixed(0)}</div>
+                    <div class="tier-gain">+$${(rewUsd * 10).toFixed(0)}</div>
+                  </div>
+                </div>
+              </div>
             `;
           } else {
             stripHtml = `
               <div class="risk-money-strip standby">
-                <span style="color: var(--text-muted); font-size: 11px;">🛡️ Multiplier: $${ptMult.toFixed(2)}/pt | 15M Swing SL Risk calculated dynamically</span>
+                <span style="color: var(--text-muted); font-size: 11px;">🛡️ Point Multiplier: $${ptMult.toFixed(2)}/pt | 1 Con / 5 Cons / 10 Cons calculated on trade trigger</span>
               </div>
             `;
           }

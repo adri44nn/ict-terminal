@@ -661,6 +661,65 @@ body {
   font-size: 10px;
 }
 
+.contract-matrix-box {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+}
+.contract-matrix-box.standby {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.matrix-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #93c5fd;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+.matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  text-align: center;
+}
+.matrix-tier {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 5px 4px;
+}
+.matrix-tier.active-tier {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.12);
+}
+.tier-head {
+  font-size: 10px;
+  font-weight: 800;
+  color: #e2e8f0;
+  margin-bottom: 2px;
+}
+.tier-loss {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ef4444;
+}
+.tier-gain {
+  font-size: 11px;
+  font-weight: 800;
+  color: #10b981;
+}
+
 .card-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
