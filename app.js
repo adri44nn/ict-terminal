@@ -1001,23 +1001,24 @@ function renderIccScannerGrid(scanResults) {
 
         <div class="trade-plan-box">
           <div class="plan-cell">
-            <div class="plan-label">${isActiveTrade ? '5M Limit Entry' : 'Entry / 50% Eq'}</div>
-            <div class="plan-val entry">${plan.entry !== null && plan.entry !== undefined ? plan.entry : (ind.equilibrium_50 || '--')}</div>
+            <div class="plan-label">Continuation Trigger</div>
+            <div class="plan-val entry" title="Continuation Breakout Trigger Entry">${plan.entry !== null && plan.entry !== undefined ? plan.entry : (ind.extreme_price || '--')}</div>
           </div>
           <div class="plan-cell">
-            <div class="plan-label">${isActiveTrade ? '5M Stop Loss' : '1H Origin SL'}</div>
+            <div class="plan-label">Protected SL</div>
             <div class="plan-val sl">${plan.stop_loss !== null && plan.stop_loss !== undefined ? plan.stop_loss : (ind.origin_price || '--')}</div>
           </div>
           <div class="plan-cell">
-            <div class="plan-label">1H Macro TP1 (${plan.rr_ratio && plan.rr_ratio !== '--' ? plan.rr_ratio + ' RR' : '1H Peak'})</div>
-            <div class="plan-val tp">${plan.take_profit_1 || plan.take_profit || ind.extreme_price || '--'}</div>
+            <div class="plan-label">Continuation TP1 (${plan.rr_ratio && plan.rr_ratio !== '--' ? plan.rr_ratio + ' RR' : '1:2 Ext'})</div>
+            <div class="plan-val tp">${plan.take_profit_1 || plan.take_profit || '--'}</div>
           </div>
         </div>
 
         <div style="font-size: 10.5px; color: var(--text-muted); background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(6, 182, 212, 0.2); padding: 7px 10px; border-radius: 6px; margin-bottom: 10px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px;">
-          <span>🎯 <strong>1H TP1 (Peak/Low):</strong> ${plan.take_profit_1 || ind.extreme_price || '--'}</span>
-          <span>🚀 <strong>1H TP2 (1:2):</strong> ${plan.take_profit_2 || '--'}</span>
-          <span>💎 <strong>1H TP3 (1:3 Runner):</strong> ${plan.take_profit_3 || '--'}</span>
+          <span>🎯 <strong>5M Peak Break:</strong> ${plan.peak_5m || plan.entry || '--'}</span>
+          <span>🚀 <strong>TP1 (1:2 Ext):</strong> ${plan.take_profit_1 || '--'}</span>
+          <span>💎 <strong>TP2 (1:3 Ext):</strong> ${plan.take_profit_2 || '--'}</span>
+          <span>👑 <strong>1H Macro Peak:</strong> ${plan.take_profit_3 || plan.htf_macro_peak || '--'}</span>
         </div>
 
         <div class="card-actions">
