@@ -357,27 +357,40 @@
       const mssEvents = this.detectMSS(candles, swingHighs, swingLows);
       const sweeps = this.detectLiquiditySweeps(candles, swingHighs, swingLows);
 
-      const recentSweeps = sweeps.slice(-5);
-      const recentMSS = mssEvents.slice(-5);
-      const unmitigatedFVGs = fvgs.filter(f => !f.mitigated);
+      const n = candles.length;
+      const recentSweeps = sweeps.filter(s => s.candle_index >= n - 25);
+      const recentMSS = mssEvents.filter(m => m.breakout_index >= n - 25);
+      const unmitigatedFVGs = fvgs.filter(f => !f.mitigated && f.candle_index >= n - 30);
 
-      let hasSweep = recentSweeps.length > 0;
-      let hasMSS = recentMSS.length > 0;
-      let hasFVG = unmitigatedFVGs.length > 0;
-      let isPrimeTime = kz.is_high_probability_time;
+      const hasSslSweep = sweeps.slice(-8).some(s => s.type === "SSL_SWEEP");
+      const hasBslSweep = sweeps.slice(-8).some(s => s.type === "BSL_SWEEP");
+      const hasBullMSS = mssEvents.slice(-6).some(m => m.type === "BULLISH_MSS");
+      const hasBearMSS = mssEvents.slice(-6).some(m => m.type === "BEARISH_MSS");
+      const recentBullFvgs = unmitigatedFVGs.filter(f => f.type === "BULLISH_FVG");
+      const recentBearFvgs = unmitigatedFVGs.filter(f => f.type === "BEARISH_FVG");
+
+      const hasSweep = hasSslSweep || hasBslSweep;
+      const hasMSS = hasBullMSS || hasBearMSS;
+      const hasFVG = recentBullFvgs.length > 0 || recentBearFvgs.length > 0;
+      const isPrimeTime = kz.is_high_probability_time;
 
       let direction = "NEUTRAL";
-      if (recentMSS.length > 0) {
-        direction = recentMSS[recentMSS.length - 1].direction;
-      } else if (recentSweeps.length > 0) {
-        direction = recentSweeps[recentSweeps.length - 1].bias;
+      if (hasBullMSS && recentBullFvgs.length > 0) {
+        direction = "BULLISH";
+      } else if (hasBearMSS && recentBearFvgs.length > 0) {
+        direction = "BEARISH";
+      } else if (mssEvents.length > 0) {
+        direction = mssEvents[mssEvents.length - 1].direction;
+      } else if (sweeps.length > 0) {
+        direction = sweeps[sweeps.length - 1].bias;
       }
 
       let confluenceScore = 0;
-      if (hasSweep) confluenceScore += 25;
-      if (hasMSS) confluenceScore += 25;
+      if (hasSweep) confluenceScore += 30;
+      if (hasMSS) confluenceScore += 30;
       if (hasFVG) confluenceScore += 25;
-      if (isPrimeTime) confluenceScore += 25;
+      if (isPrimeTime) confluenceScore += 15;
+      confluenceScore = Math.min(confluenceScore, 100);
 
       const checklist = [
         { item: "Fresh Liquidity Sweep (BSL/SSL)", passed: hasSweep },
@@ -402,17 +415,22 @@
       let gradeDesc = "No Setup / Incomplete Confluence";
       let setupType = "Observing Order Flow";
 
-      if (direction === "BULLISH" && hasFVG && hasMSS) {
-        const matchingFvg = unmitigatedFVGs.filter(f => f.type === "BULLISH_FVG").slice(-1)[0];
+      const isBullCandidate = hasBullMSS && recentBullFvgs.length > 0;
+      const isBearCandidate = hasBearMSS && recentBearFvgs.length > 0;
+
+      if (isBullCandidate) {
+        const matchingFvg = recentBullFvgs.slice(-1)[0];
         if (matchingFvg) {
           const entry = matchingFvg.top;
           const sl = matchingFvg.bottom - (spec.tick * 4);
-          const target = swingHighs.length > 0 ? swingHighs[swingHighs.length - 1].price : entry + (entry - sl) * 2.5;
-          const risk = entry - sl;
+          const risk = Math.max(entry - sl, spec.tick * 4);
+          
+          const validBsl = swingHighs.filter(sh => (sh.price - entry) >= (2.0 * risk)).map(sh => sh.price);
+          const target = validBsl.length > 0 ? validBsl[0] : (entry + (2.5 * risk));
           const reward = target - entry;
           const rr = risk > 0 ? reward / risk : 0;
 
-          if (rr >= 2.0) {
+          if (rr >= 1.8) {
             tradePlan = {
               is_active: true,
               direction: "BULLISH",
@@ -432,14 +450,16 @@
       } else if (direction === "BEARISH" && hasFVG && hasMSS) {
         const matchingFvg = unmitigatedFVGs.filter(f => f.type === "BEARISH_FVG").slice(-1)[0];
         if (matchingFvg) {
-          const entry = matchingFvg.top;
-          const sl = matchingFvg.bottom + (spec.tick * 4);
-          const target = swingLows.length > 0 ? swingLows[swingLows.length - 1].price : entry - (sl - entry) * 2.5;
-          const risk = sl - entry;
+          const entry = matchingFvg.bottom;
+          const sl = matchingFvg.top + (spec.tick * 4);
+          const risk = Math.max(sl - entry, spec.tick * 4);
+          
+          const validSsl = swingLows.filter(slItem => (entry - slItem.price) >= (2.0 * risk)).map(slItem => slItem.price);
+          const target = validSsl.length > 0 ? validSsl[0] : (entry - (2.5 * risk));
           const reward = entry - target;
           const rr = risk > 0 ? reward / risk : 0;
 
-          if (rr >= 2.0) {
+          if (rr >= 1.8) {
             tradePlan = {
               is_active: true,
               direction: "BEARISH",
