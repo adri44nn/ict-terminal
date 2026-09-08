@@ -977,8 +977,8 @@ function renderIccScannerGrid(scanResults) {
           <div class="icc-col">
             <div class="icc-col-title">Phase 1: Indication</div>
             <div>• Move: <strong>${ind.range ? ind.range + ' pts' : 'None'}</strong></div>
-            <div>• Origin: <strong>${ind.origin_price !== undefined ? ind.origin_price : '--'}</strong></div>
-            <div>• Peak: <strong>${ind.extreme_price !== undefined ? ind.extreme_price : '--'}</strong></div>
+            <div>• Origin: <strong>${ind.origin_price !== undefined ? ind.origin_price : (plan.stop_loss || '--')}</strong></div>
+            <div>• Peak: <strong>${plan.take_profit_1 !== undefined ? plan.take_profit_1 : (ind.extreme_price || '--')}</strong></div>
           </div>
           <div class="icc-col">
             <div class="icc-col-title">Phase 2: Correction</div>

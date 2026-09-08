@@ -1108,6 +1108,17 @@
         finalTradePlan.rr_ratio = `1:${(reward / risk).toFixed(2)}`;
       }
 
+      const htfIndicationSummary = {
+        type: isBullActive ? 'BULLISH_INDICATION' : 'BEARISH_INDICATION',
+        direction: isBullActive ? 'BULLISH' : 'BEARISH',
+        origin_price: macroOrigin,
+        extreme_price: macroTp1,
+        range: Math.round(macroRange * 100) / 100,
+        equilibrium_50: macroEq,
+        retrace_382: isBullActive ? Math.round((macroTp1 - (macroRange * 0.382)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.382)) * 100) / 100,
+        retrace_618: isBullActive ? Math.round((macroTp1 - (macroRange * 0.618)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.618)) * 100) / 100
+      };
+
       return {
         ...ltfState,
         symbol: symbol,
@@ -1122,7 +1133,8 @@
           bull_count: bullCount,
           bear_count: bearCount
         },
-        htf_indication: activeInd,
+        indication: htfIndicationSummary,
+        htf_indication: htfIndicationSummary,
         trade_plan: finalTradePlan
       };
     }
