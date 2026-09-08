@@ -251,12 +251,8 @@ function updateKillzoneUI(kz) {
 }
 
 // ============================================================================
-// 3. LIVE SCANNER & RADAR
+// 3. LIVE NAVIGATION & GLOBAL SIGNAL STRIP
 // ============================================================================
-async function fetchScan() {
-  try {
-    if (window.MarketData) {
-      const data = await window.MarketData.fetchAllSymbolsData();
 window.switchTab = function(tabId) {
   const tabBtns = document.querySelectorAll('.nav-tab-btn');
   tabBtns.forEach(b => {
@@ -279,6 +275,16 @@ window.jumpToSymbolCard = function(tabName, cardId) {
   setTimeout(() => {
     window.scrollToCard(cardId);
   }, 120);
+};
+
+window.scrollToCard = function(cardId) {
+  const el = document.getElementById(cardId);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('card-pulse-highlight');
+    void el.offsetWidth; // Trigger DOM reflow to restart animation
+    el.classList.add('card-pulse-highlight');
+  }
 };
 
 function updateGlobalSignalRibbon(ictResults, iccResults) {
@@ -405,6 +411,55 @@ function updateRibbonPrices(scanResults) {
   }
 }
 
+// ============================================================================
+// 3. LIVE SCANNER & RADAR INGESTOR
+// ============================================================================
+async function fetchScan() {
+  try {
+    if (window.MarketData) {
+      const data = await window.MarketData.fetchAllSymbolsData();
+      STATE.scanData = { scan_results: data.ictScanResults, killzone: data.killzone };
+      STATE.iccScanData = { scan_results: data.iccScanResults };
+      renderScannerGrid(data.ictScanResults || {});
+      renderIccScannerGrid(data.iccScanResults || {});
+      updateGlobalSignalRibbon(data.ictScanResults || {}, data.iccScanResults || {});
+
+      // Populate Live Algorithmic Alerts Stream
+      const clientAlerts = [];
+      const nyTime = window.ICTEngine ? window.ICTEngine.getNyTime().timeStr.split(' ')[0] : new Date().toLocaleTimeString();
+      for (const [sym, info] of Object.entries(data.ictScanResults || {})) {
+        if (info.is_active_trade || info.confluence_score >= 35) {
+          const plan = info.trade_plan || {};
+          clientAlerts.push({
+            time_str: nyTime,
+            symbol: sym,
+            timeframe: info.timeframe || '5m',
+            setup_grade: info.setup_grade || 'B',
+            setup_type: info.setup_type || 'ICT Order Flow',
+            direction: info.direction || 'BULLISH',
+            confluence: info.confluence_score || 50,
+            entry: plan.entry !== undefined && plan.entry !== null ? plan.entry : info.current_price,
+            tp: plan.take_profit !== undefined && plan.take_profit !== null ? plan.take_profit : (plan.target_bsl || plan.target_ssl || '--')
+          });
+        }
+      }
+      renderAlertsTable(clientAlerts);
+      return;
+    }
+  } catch (e) {
+    console.warn("Client-side scan error:", e);
+  }
+
+  try {
+    const res = await fetch('/api/scan');
+    const data = await res.json();
+    STATE.scanData = data;
+    renderScannerGrid(data.scan_results || {});
+    renderAlertsTable(data.alerts || []);
+    updateGlobalSignalRibbon(data.scan_results || {}, {});
+  } catch (e) {}
+}
+
 function renderQuickStatusBar(containerId, scanResults, modelType) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -469,18 +524,7 @@ function renderQuickStatusBar(containerId, scanResults, modelType) {
     `;
   });
 
-  container.innerHTML = html;
 }
-
-window.scrollToCard = function(cardId) {
-  const el = document.getElementById(cardId);
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.remove('card-pulse-highlight');
-    void el.offsetWidth; // Trigger DOM reflow to restart animation
-    el.classList.add('card-pulse-highlight');
-  }
-};
 
 function renderScannerGrid(scanResults) {
   renderQuickStatusBar('ictQuickStatusBar', scanResults, 'ict');
