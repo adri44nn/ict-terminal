@@ -1079,69 +1079,9 @@
         tfBadgeClass = 'mixed';
       }
 
-      // 5. TOP-DOWN ICC SYNTHESIS: 5M Execution Peak & 1H Macro Targets (Trades by Sci Core Framework)
-      const spec = (typeof MarketData !== 'undefined' && MarketData.BASE_SPECS && MarketData.BASE_SPECS[symbol]) ? MarketData.BASE_SPECS[symbol] : { macroHigh: (symbol === 'MGC' ? 4558.50 : 29720.0), macroLow: (symbol === 'MGC' ? 4329.20 : 28927.25) };
-      const htf1hCandles = tf60Candles.length >= 4 ? tf60Candles : (tf30Candles.length >= 4 ? tf30Candles : candles);
-      const htf1hHighs = htf1hCandles.map(c => c.high);
-      const htf1hLows = htf1hCandles.map(c => c.low);
-      const major1hSwingHigh = (spec && spec.macroHigh) ? spec.macroHigh : (htf1hHighs.length > 0 ? Math.max(...htf1hHighs) : currentPrice);
-      const major1hSwingLow = (spec && spec.macroLow) ? spec.macroLow : (htf1hLows.length > 0 ? Math.min(...htf1hLows) : currentPrice);
-
-      // Local 5M / 15M Indication Swings (Trades by Sci Intraday Execution)
-      const recent5mCandles = candles.slice(-50);
-      const local5mPeak = Math.max(...recent5mCandles.map(c => c.high));
-      const local5mLow = Math.min(...recent5mCandles.map(c => c.low));
-      const local15mPeak = tf15Candles.length > 0 ? Math.max(...tf15Candles.slice(-25).map(c => c.high)) : local5mPeak;
-      
-      const localRange = Math.max(local5mPeak - local5mLow, 4.0);
-      const local50Eq = Math.round((local5mLow + (localRange * 0.5)) * 100) / 100;
-      const localSl = Math.round((local5mLow + (localRange * 0.25)) * 100) / 100;
-
-      // Phase 3 Continuation Breakout Trigger Entry (e.g. 4485.6 on Gold 5M Peak, or 4482.4 on 15M Peak)
-      const continuationTriggerEntry = local5mPeak;
-      const continuationTp1 = Math.round((local5mPeak + (localRange * 0.5)) * 100) / 100;
-      const continuationTp2 = Math.round((local5mPeak + (localRange * 1.0)) * 100) / 100;
-      const continuationTp3 = major1hSwingHigh;
-
-      const isMacroBull = true;
-
-      const finalTradePlan = {
-        is_active: ltfState.is_active_trade || false,
-        direction: 'BULLISH',
-        action: ltfState.is_active_trade ? 'ACTIVE CONTINUATION' : 'PULLBACK IN PROGRESS',
-        entry: continuationTriggerEntry,
-        breakout_entry: continuationTriggerEntry,
-        pullback_entry: local50Eq,
-        stop_loss: localSl,
-        take_profit: continuationTp1,
-        take_profit_1: continuationTp1,
-        take_profit_2: continuationTp2,
-        take_profit_3: continuationTp3,
-        peak_5m: local5mPeak,
-        peak_15m: local15mPeak,
-        htf_macro_peak: major1hSwingHigh,
-        risk_points: Math.round(Math.abs(continuationTriggerEntry - localSl) * 100) / 100,
-        reward_points: Math.round(Math.abs(continuationTp1 - continuationTriggerEntry) * 100) / 100,
-        rr_ratio: `1:${(Math.abs(continuationTp1 - continuationTriggerEntry) / Math.max(Math.abs(continuationTriggerEntry - localSl), 1.0)).toFixed(2)}`
-      };
-
-      const htfIndicationSummary = {
-        type: 'BULLISH_INDICATION',
-        direction: 'BULLISH',
-        origin_price: local5mLow,
-        extreme_price: local5mPeak,
-        range: Math.round(localRange * 100) / 100,
-        equilibrium_50: local50Eq,
-        peak_5m: local5mPeak,
-        peak_15m: local15mPeak,
-        macro_1h_peak: major1hSwingHigh
-      };
-
+      // 5. TOP-DOWN ICC SYNTHESIS: Authentic Intraday Execution & Multi-TF Flow
       return {
         ...ltfState,
-        direction: isMacroBull ? 'BULLISH' : (ltfState.direction || 'BULLISH'),
-        phase: ltfState.is_active_trade ? 'PHASE_3_CONTINUATION' : 'PHASE_2_CORRECTION',
-        phase_title: ltfState.is_active_trade ? `🚀 PHASE 3: CONTINUATION ARMED (${finalTradePlan.rr_ratio} RR)` : `⏳ Phase 2: Pullback in Progress (Eq: ${local50Eq})`,
         symbol: symbol,
         timeframe: "5m",
         current_price: currentPrice,
@@ -1154,9 +1094,8 @@
           bull_count: bullCount,
           bear_count: bearCount
         },
-        indication: htfIndicationSummary,
-        htf_indication: htfIndicationSummary,
-        trade_plan: finalTradePlan
+        indication: ltfState.indication,
+        trade_plan: ltfState.trade_plan
       };
     }
   };
