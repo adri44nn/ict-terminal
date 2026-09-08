@@ -1255,14 +1255,14 @@
 
     // Base market references for micro futures contracts (live 2026 intraday prices & 5M swing peaks)
     BASE_SPECS: {
-      "MNQ": { basePrice: 29667.50, tick: 0.25, volAvg: 2200, swingAmp: 45.0, intradayHigh: 29715.00, intradayLow: 29620.00 },
-      "MES": { basePrice: 7719.50, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7731.50, intradayLow: 7706.00 },
-      "M2K": { basePrice: 2974.00, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2983.20, intradayLow: 2965.20 },
-      "MGC": { basePrice: 4474.60, tick: 0.10, volAvg: 1200, swingAmp: 9.0, intradayHigh: 4484.80, intradayLow: 4465.40 }
+      "MNQ": { basePrice: 29733.25, tick: 0.25, volAvg: 2200, swingAmp: 45.0, intradayHigh: 29755.00, intradayLow: 29690.00 },
+      "MES": { basePrice: 7721.75, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7732.50, intradayLow: 7710.00 },
+      "M2K": { basePrice: 2972.40, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2980.50, intradayLow: 2966.00 },
+      "MGC": { basePrice: 4482.00, tick: 0.10, volAvg: 1200, swingAmp: 9.0, intradayHigh: 4488.50, intradayLow: 4474.00 }
     },
 
     generateFallbackCandles: function(symKey, count = 80, intervalMins = 5) {
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 4474.60, tick: 0.10, volAvg: 1200, swingAmp: 9.0, intradayHigh: 4484.80, intradayLow: 4465.40 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 4482.00, tick: 0.10, volAvg: 1200, swingAmp: 9.0, intradayHigh: 4488.50, intradayLow: 4474.00 };
       const now = Math.floor(Date.now() / 1000);
       const stepSecs = intervalMins * 60;
       const startTime = now - (count * stepSecs);
@@ -1314,7 +1314,7 @@
     },
 
     advanceCachedCandles: function(symKey, intervalMins = 5) {
-      const cacheKey = 'ict_live_candles_v5_' + symKey;
+      const cacheKey = 'ict_live_candles_v6_' + symKey;
       if (!this.candleCache[symKey] || this.candleCache[symKey].length === 0) {
         try {
           const stored = localStorage.getItem(cacheKey);
@@ -1328,7 +1328,7 @@
         return this.candleCache[symKey];
       }
 
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 4476.60, tick: 0.10, volAvg: 1200, swingAmp: 15.0 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 4482.00, tick: 0.10, volAvg: 1200, swingAmp: 9.0 };
       const candles = this.candleCache[symKey];
       const last = candles[candles.length - 1];
       const now = Math.floor(Date.now() / 1000);
