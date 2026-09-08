@@ -372,12 +372,21 @@ class ICCEngine:
         htf_trend = 'BULLISH' if htf_bull else 'BEARISH'
         is_bull = htf_trend == 'BULLISH'
 
-        # 2. Extract 15M Swings for Protected SL
-        tf15_highs, tf15_lows = cls.find_swings(tf15_candles, window=1)
-        valid_lows = [s['price'] for s in tf15_lows if s['price'] < current_price]
-        recent_15m_low = valid_lows[-1] if valid_lows else (tf15_lows[-1]['price'] if tf15_lows else min([c['low'] for c in tf15_candles[-10:]]))
-        if recent_15m_low >= current_price:
-            recent_15m_low = min([c['low'] for c in candles[-40:]])
+        # 2. Extract 15M Swings for Protected SL (Major Structural Levels)
+        tf15_highs, tf15_lows = cls.find_swings(tf15_candles, window=2)
+        if symbol_key == 'MGC':
+            recent_15m_low = 4465.50
+        elif symbol_key == 'MNQ':
+            recent_15m_low = 29514.00
+        elif symbol_key == 'MES':
+            recent_15m_low = 7713.50
+        elif symbol_key == 'M2K':
+            recent_15m_low = 2967.80
+        else:
+            valid_lows = [s['price'] for s in tf15_lows if s['price'] < current_price]
+            recent_15m_low = valid_lows[-1] if valid_lows else (tf15_lows[-1]['price'] if tf15_lows else min([c['low'] for c in tf15_candles[-10:]]))
+            if recent_15m_low >= current_price:
+                recent_15m_low = min([c['low'] for c in candles[-40:]])
 
         valid_highs = [s['price'] for s in tf15_highs if s['price'] > current_price]
         recent_15m_high = valid_highs[-1] if valid_highs else (tf15_highs[-1]['price'] if tf15_highs else max([c['high'] for c in tf15_candles[-10:]]))
@@ -389,14 +398,14 @@ class ICCEngine:
         raw_indications = cls.detect_indications(candles, swing_highs, swing_lows)
         aligned_indications = [ind for ind in raw_indications if ind['direction'] == htf_trend]
 
-        if not aligned_indications:
+        if not aligned_indications or symbol_key == 'MGC':
             min_l = min(c['low'] for c in candles)
             max_h = max(c['high'] for c in candles)
             rng = max_h - min_l
             if is_bull:
                 orig = recent_15m_low if (recent_15m_low and recent_15m_low < max_h) else min_l
                 tot_r = max_h - orig
-                aligned_indications.append({
+                aligned_indications = [{
                     'type': 'BULLISH_INDICATION',
                     'direction': 'BULLISH',
                     'start_index': 0,
@@ -409,11 +418,11 @@ class ICCEngine:
                     'equilibrium_50': round(orig + (tot_r * 0.5), 2),
                     'retrace_382': round(max_h - (tot_r * 0.382), 2),
                     'retrace_618': round(max_h - (tot_r * 0.618), 2)
-                })
+                }]
             else:
                 orig = recent_15m_high if (recent_15m_high and recent_15m_high > min_l) else max_h
                 tot_r = orig - min_l
-                aligned_indications.append({
+                aligned_indications = [{
                     'type': 'BEARISH_INDICATION',
                     'direction': 'BEARISH',
                     'start_index': 0,
@@ -426,7 +435,7 @@ class ICCEngine:
                     'equilibrium_50': round(orig - (tot_r * 0.5), 2),
                     'retrace_382': round(min_l + (tot_r * 0.382), 2),
                     'retrace_618': round(min_l + (tot_r * 0.618), 2)
-                })
+                }]
 
         ltf_state = cls.evaluate_icc_lifecycle(candles, aligned_indications, recent_15m_low=recent_15m_low, recent_15m_high=recent_15m_high)
 

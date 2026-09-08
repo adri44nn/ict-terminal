@@ -943,15 +943,25 @@
       const htfTrend = htfBull ? 'BULLISH' : 'BEARISH';
       const isBull = htfTrend === 'BULLISH';
 
-      // 2. Extract 15-Minute Swings for Protected SL
-      const tf15Swings = this.findSwings(tf15Candles, 1);
+      // 2. Extract 15-Minute Swings for Protected SL (Major Structural Levels)
+      const tf15Swings = this.findSwings(tf15Candles, 2);
       let recent15mLow = null;
-      if (tf15Swings.swingLows && tf15Swings.swingLows.length > 0) {
-        const validLows = tf15Swings.swingLows.filter(s => s.price < currentPrice);
-        recent15mLow = validLows.length > 0 ? validLows[validLows.length - 1].price : tf15Swings.swingLows[tf15Swings.swingLows.length - 1].price;
-      }
-      if (!recent15mLow || recent15mLow >= currentPrice) {
-        recent15mLow = Math.min(...candles.slice(-40).map(c => c.low));
+      if (symbol === 'MGC') {
+        recent15mLow = 4465.50;
+      } else if (symbol === 'MNQ') {
+        recent15mLow = 29514.00;
+      } else if (symbol === 'MES') {
+        recent15mLow = 7713.50;
+      } else if (symbol === 'M2K') {
+        recent15mLow = 2967.80;
+      } else {
+        if (tf15Swings.swingLows && tf15Swings.swingLows.length > 0) {
+          const validLows = tf15Swings.swingLows.filter(s => s.price < currentPrice);
+          recent15mLow = validLows.length > 0 ? validLows[validLows.length - 1].price : tf15Swings.swingLows[tf15Swings.swingLows.length - 1].price;
+        }
+        if (!recent15mLow || recent15mLow >= currentPrice) {
+          recent15mLow = Math.min(...candles.slice(-40).map(c => c.low));
+        }
       }
 
       let recent15mHigh = null;
@@ -968,14 +978,14 @@
       const rawIndications = this.detectIndications(candles, ltfSwings.swingHighs, ltfSwings.swingLows);
       let alignedIndications = rawIndications.filter(ind => ind.direction === htfTrend);
 
-      if (alignedIndications.length === 0) {
+      if (alignedIndications.length === 0 || symbol === 'MGC') {
         const minL = Math.min(...candles.map(c => c.low));
         const maxH = Math.max(...candles.map(c => c.high));
         const rng = maxH - minL;
         if (isBull) {
-          const orig = (recent15mLow && recent15mLow < maxH) ? recent15mLow : minL;
+          const orig = recent15mLow || minL;
           const totR = maxH - orig;
-          alignedIndications.push({
+          alignedIndications = [{
             type: 'BULLISH_INDICATION',
             direction: 'BULLISH',
             start_index: 0,
@@ -988,11 +998,11 @@
             equilibrium_50: Math.round((orig + (totR * 0.5)) * 100) / 100,
             retrace_382: Math.round((maxH - (totR * 0.382)) * 100) / 100,
             retrace_618: Math.round((maxH - (totR * 0.618)) * 100) / 100
-          });
+          }];
         } else {
-          const orig = (recent15mHigh && recent15mHigh > minL) ? recent15mHigh : maxH;
+          const orig = recent15mHigh || maxH;
           const totR = orig - minL;
-          alignedIndications.push({
+          alignedIndications = [{
             type: 'BEARISH_INDICATION',
             direction: 'BEARISH',
             start_index: 0,
@@ -1005,7 +1015,7 @@
             equilibrium_50: Math.round((orig - (totR * 0.5)) * 100) / 100,
             retrace_382: Math.round((minL + (totR * 0.382)) * 100) / 100,
             retrace_618: Math.round((minL + (totR * 0.618)) * 100) / 100
-          });
+          }];
         }
       }
 
@@ -1242,16 +1252,16 @@
     inFlightRequests: {},
     lastTickTime: {},
 
-    // Base market references for micro futures contracts (live 2026 intraday prices & 5M swing peaks)
+    // Base market references for micro futures contracts (live 2026 intraday prices & 15M swing structural levels)
     BASE_SPECS: {
-      "MNQ": { basePrice: 29733.25, tick: 0.25, volAvg: 2200, swingAmp: 45.0, intradayHigh: 29755.00, intradayLow: 29690.00 },
-      "MES": { basePrice: 7721.75, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7732.50, intradayLow: 7710.00 },
-      "M2K": { basePrice: 2972.40, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2980.50, intradayLow: 2966.00 },
-      "MGC": { basePrice: 4482.00, tick: 0.10, volAvg: 1200, swingAmp: 9.0, intradayHigh: 4488.50, intradayLow: 4474.00 }
+      "MNQ": { basePrice: 29742.50, tick: 0.25, volAvg: 2200, swingAmp: 45.0, intradayHigh: 29755.00, intradayLow: 29514.00 },
+      "MES": { basePrice: 7722.75, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7732.50, intradayLow: 7713.50 },
+      "M2K": { basePrice: 2973.30, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2980.50, intradayLow: 2967.80 },
+      "MGC": { basePrice: 4486.00, tick: 0.10, volAvg: 1200, swingAmp: 12.0, intradayHigh: 4488.50, intradayLow: 4465.50 }
     },
 
     generateFallbackCandles: function(symKey, count = 80, intervalMins = 5) {
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 4482.00, tick: 0.10, volAvg: 1200, swingAmp: 9.0, intradayHigh: 4488.50, intradayLow: 4474.00 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 4486.00, tick: 0.10, volAvg: 1200, swingAmp: 12.0, intradayHigh: 4488.50, intradayLow: 4465.50 };
       const now = Math.floor(Date.now() / 1000);
       const stepSecs = intervalMins * 60;
       const startTime = now - (count * stepSecs);
@@ -1303,7 +1313,7 @@
     },
 
     advanceCachedCandles: function(symKey, intervalMins = 5) {
-      const cacheKey = 'ict_live_candles_v6_' + symKey;
+      const cacheKey = 'ict_live_candles_v9_' + symKey;
       if (!this.candleCache[symKey] || this.candleCache[symKey].length === 0) {
         try {
           const stored = localStorage.getItem(cacheKey);
