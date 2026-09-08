@@ -1141,7 +1141,7 @@
         ...ltfState,
         direction: isMacroBull ? 'BULLISH' : (ltfState.direction || 'BULLISH'),
         phase: ltfState.is_active_trade ? 'PHASE_3_CONTINUATION' : 'PHASE_2_CORRECTION',
-        phase_title: ltfState.is_active_trade ? `🚀 PHASE 3: CONTINUATION ARMED (${finalTradePlan.rr_ratio} RR)` : `⏳ Phase 2: Pullback in Progress (Eq: ${macroEq})`,
+        phase_title: ltfState.is_active_trade ? `🚀 PHASE 3: CONTINUATION ARMED (${finalTradePlan.rr_ratio} RR)` : `⏳ Phase 2: Pullback in Progress (Eq: ${local50Eq})`,
         symbol: symbol,
         timeframe: "5m",
         current_price: currentPrice,
