@@ -1052,17 +1052,27 @@
       }
 
       // 5. TOP-DOWN ICC SYNTHESIS: 1H Macro Targets with 5M Execution
-      // If 1H Indication exists, use 1H Indication Peak/Low as the Primary TP1 Target
+      // Use 1H Macro Swing High / Peak as the Primary TP1 Target (Draw on Liquidity)
+      const htf1hCandles = tf60Candles.length >= 4 ? tf60Candles : (tf30Candles.length >= 4 ? tf30Candles : candles);
+      const htf1hHighs = htf1hCandles.map(c => c.high);
+      const htf1hLows = htf1hCandles.map(c => c.low);
+      const major1hSwingHigh = htf1hHighs.length > 0 ? Math.max(...htf1hHighs) : currentPrice;
+      const major1hSwingLow = htf1hLows.length > 0 ? Math.min(...htf1hLows) : currentPrice;
+
       const activeInd = latestHtfInd || ltfState.indication || (ltfIndications.length > 0 ? ltfIndications[ltfIndications.length - 1] : null);
-      let macroTp1 = activeInd ? activeInd.extreme_price : currentPrice;
-      let macroOrigin = activeInd ? activeInd.origin_price : currentPrice;
-      let macroEq = activeInd ? activeInd.equilibrium_50 : currentPrice;
-      let macroRange = activeInd ? activeInd.range : 10.0;
+      const isBullActive = (activeInd ? activeInd.direction : (ltfState.direction || 'BULLISH')) === 'BULLISH';
 
-      let macroTp2 = activeInd ? (activeInd.direction === 'BULLISH' ? Math.round((macroTp1 + (macroRange * 0.5)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 0.5)) * 100) / 100) : currentPrice;
-      let macroTp3 = activeInd ? (activeInd.direction === 'BULLISH' ? Math.round((macroTp1 + (macroRange * 1.0)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 1.0)) * 100) / 100) : currentPrice;
+      // 1H Peak Draw on Liquidity (e.g. 4558.5 on Gold)
+      let macroTp1 = isBullActive ? (major1hSwingHigh > currentPrice ? major1hSwingHigh : (activeInd ? activeInd.extreme_price : currentPrice))
+                                  : (major1hSwingLow < currentPrice ? major1hSwingLow : (activeInd ? activeInd.extreme_price : currentPrice));
 
-      const isBullActive = (activeInd ? activeInd.direction : 'BULLISH') === 'BULLISH';
+      let macroOrigin = activeInd ? activeInd.origin_price : (isBullActive ? major1hSwingLow : major1hSwingHigh);
+      let macroRange = Math.max(Math.abs(macroTp1 - macroOrigin), 10.0);
+      let macroEq = isBullActive ? Math.round((macroOrigin + (macroRange * 0.5)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.5)) * 100) / 100;
+
+      let macroTp2 = isBullActive ? Math.round((macroTp1 + (macroRange * 0.5)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 0.5)) * 100) / 100;
+      let macroTp3 = isBullActive ? Math.round((macroTp1 + (macroRange * 1.0)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 1.0)) * 100) / 100;
+
       const oteMacroSl = isBullActive ? Math.round((macroOrigin + (macroRange * 0.25)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.25)) * 100) / 100;
 
       // Merge 1H Macro targets into the active trade plan
@@ -1349,9 +1359,9 @@
       const fetchPromise = (async () => {
         const tickers = [cfg.yahoo, cfg.alt].filter(Boolean);
         const proxyTemplates = [
-          (t) => `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=2d`)}`,
-          (t) => `https://corsproxy.io/?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=2d`)}`,
-          (t) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=2d`)}`
+          (t) => `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=5d`)}`,
+          (t) => `https://corsproxy.io/?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=5d`)}`,
+          (t) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=5d`)}`
         ];
 
         const fetchCandidate = async (url) => {
