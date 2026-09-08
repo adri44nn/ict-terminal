@@ -10,11 +10,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ICT Radar">
   <meta name="theme-color" content="#0a0e17">
-  <link rel="manifest" href="manifest.json?v=3.7">
+  <link rel="manifest" href="manifest.json?v=3.8">
   <title>ICT Apex Terminal & Live Micro Scanner</title>
-  <link rel="stylesheet" href="styles.css?v=3.7">
+  <link rel="stylesheet" href="styles.css?v=3.8">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230a0e17%22/><text x=%2250%22 y=%2270%22 font-size=%2265%22 text-anchor=%22middle%22>⚡</text></svg>">
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
 <body>
 
@@ -202,10 +203,15 @@
                 <button class="pill-btn active" data-tf="5m">5m</button>
                 <button class="pill-btn" data-tf="15m">15m</button>
               </div>
+
+              <div class="pill-group" id="chartSourcePills">
+                <button class="pill-btn active" data-source="tv">🔴 Live TradingView</button>
+                <button class="pill-btn" data-source="radar">⚡ ICT / ICC Smart Radar</button>
+              </div>
             </div>
 
-            <!-- Overlay Toggles -->
-            <div class="overlay-toggles">
+            <!-- Overlay Toggles (Shown when Radar view active) -->
+            <div class="overlay-toggles" id="radarOverlayToggles" style="display: none;">
               <span class="toggle-chip active" data-overlay="fvg" id="toggleFvg">🟩 FVG</span>
               <span class="toggle-chip active" data-overlay="mss" id="toggleMss">⚡ MSS</span>
               <span class="toggle-chip active" data-overlay="sweeps" id="toggleSweeps">🟣 Sweeps</span>
@@ -214,8 +220,13 @@
             </div>
           </div>
 
-          <!-- Canvas -->
-          <div class="canvas-wrapper">
+          <!-- TradingView Real-Time Chart Container (Default) -->
+          <div class="canvas-wrapper" id="tvChartWrapper">
+            <div id="tv_chart_container" style="width: 100%; height: 100%;"></div>
+          </div>
+
+          <!-- Canvas (For ICT/ICC Smart Radar Mode) -->
+          <div class="canvas-wrapper" id="ictCanvasWrapper" style="display: none;">
             <canvas id="ictChart"></canvas>
           </div>
         </div>
@@ -345,8 +356,8 @@
 
   <div class="toast-notification" id="toastBox">Notification</div>
 
-  <script src="academy_data.js?v=3.7"></script>
-  <script src="engine.js?v=3.7"></script>
-  <script src="app.js?v=3.7"></script>
+  <script src="academy_data.js?v=3.8"></script>
+  <script src="engine.js?v=3.8"></script>
+  <script src="app.js?v=3.8"></script>
 </body>
 </html>

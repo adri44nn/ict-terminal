@@ -8,6 +8,7 @@ const STATE = {
   activeTab: 'scannerTab',
   activeSymbol: 'MNQ',
   activeTimeframe: '5m',
+  chartSource: 'tv',
   overlays: {
     fvg: true,
     mss: true,
@@ -150,7 +151,11 @@ function setupNavigation() {
       STATE.activeTab = tabId;
 
       if (tabId === 'chartTab') {
-        setTimeout(renderCanvasChart, 50);
+        if (STATE.chartSource === 'tv') {
+          setTimeout(() => renderTradingViewChart(STATE.activeSymbol, STATE.activeTimeframe), 50);
+        } else {
+          setTimeout(renderCanvasChart, 50);
+        }
       }
       if (tabId === 'iccTab') {
         fetchIccScan();
@@ -1057,6 +1062,73 @@ window.quickPaperExecute = function(sym, dir, entry, sl, tp, setup) {
 // ============================================================================
 // 4. CHART ENGINE
 // ============================================================================
+const TV_SYMBOLS = {
+  'MNQ': 'CME_MINI:NQ1!',
+  'MES': 'CME_MINI:ES1!',
+  'M2K': 'CME_MINI:RTY1!',
+  'MGC': 'COMEX:GC1!'
+};
+
+const TV_INTERVAL_MAP = {
+  '1m': '1',
+  '5m': '5',
+  '15m': '15',
+  '30m': '30',
+  '60m': '60',
+  '1h': '60',
+  '1d': 'D'
+};
+
+function renderTradingViewChart(sym, tf) {
+  const container = document.getElementById('tv_chart_container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const tvSym = TV_SYMBOLS[sym] || 'CME_MINI:NQ1!';
+  const tvInterval = TV_INTERVAL_MAP[tf] || '5';
+
+  if (typeof TradingView !== 'undefined') {
+    try {
+      new TradingView.widget({
+        "autosize": true,
+        "symbol": tvSym,
+        "interval": tvInterval,
+        "timezone": "America/New_York",
+        "theme": "dark",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg": "#0a0e17",
+        "enable_publishing": false,
+        "hide_side_toolbar": false,
+        "allow_symbol_change": true,
+        "save_image": false,
+        "container_id": "tv_chart_container",
+        "studies": [
+          "STD;Fair Value Gap"
+        ],
+        "overrides": {
+          "paneProperties.background": "#090d16",
+          "paneProperties.vertGridProperties.color": "rgba(255, 255, 255, 0.05)",
+          "paneProperties.horzGridProperties.color": "rgba(255, 255, 255, 0.05)",
+          "symbolWatermarkProperties.transparency": 90,
+          "scalesProperties.textColor": "#94a3b8",
+          "mainSeriesProperties.candleStyle.upColor": "#10b981",
+          "mainSeriesProperties.candleStyle.downColor": "#ef4444",
+          "mainSeriesProperties.candleStyle.drawWick": true,
+          "mainSeriesProperties.candleStyle.drawBorder": true,
+          "mainSeriesProperties.candleStyle.borderColor": "#10b981",
+          "mainSeriesProperties.candleStyle.borderUpColor": "#10b981",
+          "mainSeriesProperties.candleStyle.borderDownColor": "#ef4444",
+          "mainSeriesProperties.candleStyle.wickUpColor": "#10b981",
+          "mainSeriesProperties.candleStyle.wickDownColor": "#ef4444"
+        }
+      });
+    } catch (e) {
+      console.warn("TradingView widget init error:", e);
+    }
+  }
+}
+
 function setupChartControls() {
   document.querySelectorAll('#chartSymbolPills .pill-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1075,6 +1147,31 @@ function setupChartControls() {
       const tf = btn.getAttribute('data-tf');
       STATE.activeTimeframe = tf;
       fetchChart(STATE.activeSymbol, STATE.activeTimeframe);
+    });
+  });
+
+  document.querySelectorAll('#chartSourcePills .pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#chartSourcePills .pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const src = btn.getAttribute('data-source');
+      STATE.chartSource = src;
+
+      const tvWrapper = document.getElementById('tvChartWrapper');
+      const ictWrapper = document.getElementById('ictCanvasWrapper');
+      const radarToggles = document.getElementById('radarOverlayToggles');
+
+      if (src === 'tv') {
+        if (tvWrapper) tvWrapper.style.display = 'block';
+        if (ictWrapper) ictWrapper.style.display = 'none';
+        if (radarToggles) radarToggles.style.display = 'none';
+        renderTradingViewChart(STATE.activeSymbol, STATE.activeTimeframe);
+      } else {
+        if (tvWrapper) tvWrapper.style.display = 'none';
+        if (ictWrapper) ictWrapper.style.display = 'block';
+        if (radarToggles) radarToggles.style.display = 'flex';
+        renderCanvasChart();
+      }
     });
   });
 
@@ -1097,7 +1194,11 @@ function setupChartControls() {
     }
   });
 
-  window.addEventListener('resize', renderCanvasChart);
+  window.addEventListener('resize', () => {
+    if (STATE.chartSource !== 'tv') {
+      renderCanvasChart();
+    }
+  });
 }
 
 function selectSymbol(sym) {
@@ -1112,7 +1213,11 @@ function selectSymbol(sym) {
 }
 
 async function fetchChart(sym, tf) {
-  // 1. Try Live Backend API First (100% Direct Yahoo Finance Market Feed)
+  if (STATE.chartSource === 'tv') {
+    renderTradingViewChart(sym, tf);
+  }
+
+  // Also run underlying analysis in the background to keep OTE ladder and PD arrays sidebar updated
   try {
     const ctrl = new AbortController();
     const tId = setTimeout(() => ctrl.abort(), 2500);
@@ -1121,7 +1226,9 @@ async function fetchChart(sym, tf) {
     if (res.ok) {
       const data = await res.json();
       STATE.chartData = data;
-      renderCanvasChart();
+      if (STATE.chartSource !== 'tv') {
+        renderCanvasChart();
+      }
       updateChartSidebar(data.analysis);
       return;
     }
@@ -1140,7 +1247,9 @@ async function fetchChart(sym, tf) {
         candles: candles,
         analysis: analysis
       };
-      renderCanvasChart();
+      if (STATE.chartSource !== 'tv') {
+        renderCanvasChart();
+      }
       updateChartSidebar(analysis);
     }
   } catch (e) {
