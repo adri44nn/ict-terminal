@@ -1220,23 +1220,23 @@
     inFlightRequests: {},
     lastTickTime: {},
 
-    // Base market references for micro futures contracts (live 2026 market prices & macro swing peaks)
+    // Base market references for micro futures contracts (live 2026 intraday prices & 5M swing peaks)
     BASE_SPECS: {
-      "MNQ": { basePrice: 29667.50, tick: 0.25, volAvg: 2200, swingAmp: 45.0, macroHigh: 29720.00, macroLow: 28927.25 },
-      "MES": { basePrice: 7719.50, tick: 0.25, volAvg: 2800, swingAmp: 12.0, macroHigh: 7742.50, macroLow: 7650.00 },
-      "M2K": { basePrice: 2974.00, tick: 0.10, volAvg: 1400, swingAmp: 6.5, macroHigh: 2995.00, macroLow: 2920.00 },
-      "MGC": { basePrice: 4476.60, tick: 0.10, volAvg: 1200, swingAmp: 15.0, macroHigh: 4558.50, macroLow: 4329.20 }
+      "MNQ": { basePrice: 29667.50, tick: 0.25, volAvg: 2200, swingAmp: 45.0, intradayHigh: 29715.00, intradayLow: 29620.00 },
+      "MES": { basePrice: 7719.50, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7731.50, intradayLow: 7706.00 },
+      "M2K": { basePrice: 2974.00, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2983.20, intradayLow: 2965.20 },
+      "MGC": { basePrice: 4474.60, tick: 0.10, volAvg: 1200, swingAmp: 9.0, intradayHigh: 4484.80, intradayLow: 4465.40 }
     },
 
     generateFallbackCandles: function(symKey, count = 80, intervalMins = 5) {
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 4476.60, tick: 0.10, volAvg: 1200, swingAmp: 15.0, macroHigh: 4558.50, macroLow: 4329.20 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 4474.60, tick: 0.10, volAvg: 1200, swingAmp: 9.0, intradayHigh: 4484.80, intradayLow: 4465.40 };
       const now = Math.floor(Date.now() / 1000);
       const stepSecs = intervalMins * 60;
       const startTime = now - (count * stepSecs);
 
       const candles = [];
-      const mLow = spec.macroLow || (spec.basePrice - 100);
-      const mHigh = spec.macroHigh || (spec.basePrice + 100);
+      const mLow = spec.intradayLow || (spec.basePrice - spec.swingAmp);
+      const mHigh = spec.intradayHigh || (spec.basePrice + spec.swingAmp);
       const symCode = (symKey.charCodeAt(0) * 17) + (symKey.charCodeAt(1) || 5);
 
       // Deterministic mathematical generator (Zero random flickering across page refreshes)
@@ -1244,26 +1244,26 @@
         const cTime = startTime + (i * stepSecs);
         let targetPrice;
 
-        if (i < 45) {
-          // Expansion phase from Macro Low to Macro High
-          const progress = i / 44.0;
-          targetPrice = mLow + (mHigh - mLow) * progress + (Math.sin(i / 3.0 + symCode) * spec.swingAmp * 0.25);
+        if (i < 50) {
+          // Bullish Impulse Expansion from Session Low to 5M Swing High Peak
+          const progress = i / 49.0;
+          targetPrice = mLow + (mHigh - mLow) * progress + (Math.sin(i / 4.0 + symCode) * spec.swingAmp * 0.15);
         } else {
-          // Correction phase retracing from Macro High down to current basePrice
-          const progress = (i - 44) / Math.max(1, count - 45);
-          targetPrice = mHigh - (mHigh - spec.basePrice) * progress + (Math.cos(i / 3.5 + symCode) * spec.swingAmp * 0.18);
+          // Correction Pullback into 50% Equilibrium Zone near current live price
+          const progress = (i - 49) / Math.max(1, count - 50);
+          targetPrice = mHigh - (mHigh - spec.basePrice) * progress + (Math.cos(i / 3.0 + symCode) * spec.swingAmp * 0.12);
         }
 
         const open = Math.round(targetPrice / spec.tick) * spec.tick;
-        const detWiggle = Math.sin(i * 12.9898 + symCode) * (spec.swingAmp * 0.15);
+        const detWiggle = Math.sin(i * 12.9898 + symCode) * (spec.swingAmp * 0.08);
         const close = Math.round((targetPrice + detWiggle) / spec.tick) * spec.tick;
 
-        const spread = Math.abs(Math.sin(i * 7.123 + symCode)) * (spec.swingAmp * 0.2) + Math.abs(close - open) * 0.2;
+        const spread = Math.abs(Math.sin(i * 7.123 + symCode)) * (spec.swingAmp * 0.12) + Math.abs(close - open) * 0.15;
         let high = Math.round((Math.max(open, close) + spread) / spec.tick) * spec.tick;
         let low = Math.round((Math.min(open, close) - spread) / spec.tick) * spec.tick;
 
         if (i === 0) low = Math.min(low, mLow);
-        if (i === 44) high = Math.max(high, mHigh);
+        if (i === 49) high = Math.max(high, mHigh);
 
         const volume = Math.floor(spec.volAvg * (0.7 + Math.abs(Math.sin(i + symCode)) * 0.6));
 
@@ -1281,15 +1281,17 @@
     },
 
     advanceCachedCandles: function(symKey, intervalMins = 5) {
+      const cacheKey = 'ict_live_candles_v5_' + symKey;
       if (!this.candleCache[symKey] || this.candleCache[symKey].length === 0) {
         try {
-          const stored = localStorage.getItem('ict_live_candles_' + symKey);
+          const stored = localStorage.getItem(cacheKey);
           if (stored) {
             this.candleCache[symKey] = JSON.parse(stored);
             return this.candleCache[symKey];
           }
         } catch (e) {}
         this.candleCache[symKey] = this.generateFallbackCandles(symKey, 80, intervalMins);
+        try { localStorage.setItem(cacheKey, JSON.stringify(this.candleCache[symKey])); } catch (e) {}
         return this.candleCache[symKey];
       }
 

@@ -430,82 +430,22 @@ class ICCEngine:
         indications = cls.detect_indications(candles, swing_highs, swing_lows)
         icc_state = cls.evaluate_icc_lifecycle(candles, indications)
 
-        macro_specs = {
-            "MNQ": {"macro_high": 29720.00, "macro_low": 28927.25},
-            "MES": {"macro_high": 7742.50, "macro_low": 7650.00},
-            "M2K": {"macro_high": 2995.00, "macro_low": 2920.00},
-            "MGC": {"macro_high": 4558.50, "macro_low": 4329.20},
-        }
-        spec = macro_specs.get(symbol_key, {"macro_high": 4558.50, "macro_low": 4329.20})
-        major1hSwingHigh = spec["macro_high"]
-        major1hSwingLow = spec["macro_low"]
-
-        # Local 5M / 15M Indication Swings (Trades by Sci Intraday Continuation Trigger)
-        recent5m_highs = [c['high'] for c in candles[-50:]]
-        recent5m_lows = [c['low'] for c in candles[-50:]]
-        local5m_peak = max(recent5m_highs) if recent5m_highs else current_price
-        local5m_low = min(recent5m_lows) if recent5m_lows else current_price
-        local_range = max(local5m_peak - local5m_low, 4.0)
-        local_50_eq = round(local5m_low + (local_range * 0.5), 2)
-        local_sl = round(local5m_low + (local_range * 0.25), 2)
-
-        # Continuation Breakout Trigger Entry (e.g. 4485.6 on Gold 5M Peak Break)
-        continuation_trigger = local5m_peak
-        continuation_tp1 = round(local5m_peak + (local_range * 0.5), 2)
-        continuation_tp2 = round(local5m_peak + (local_range * 1.0), 2)
-        continuation_tp3 = major1hSwingHigh
-
-        risk_p = round(abs(continuation_trigger - local_sl), 2)
-        reward_p = round(abs(continuation_tp1 - continuation_trigger), 2)
-        rr_str = f"1:{round(reward_p / max(risk_p, 1.0), 2)}"
-
-        final_trade_plan = {
-            'is_active': icc_state.get('is_active_trade', False),
-            'direction': 'BULLISH',
-            'action': 'ACTIVE CONTINUATION' if icc_state.get('is_active_trade') else 'PULLBACK IN PROGRESS',
-            'entry': continuation_trigger,
-            'breakout_entry': continuation_trigger,
-            'pullback_entry': local_50_eq,
-            'stop_loss': local_sl,
-            'take_profit': continuation_tp1,
-            'take_profit_1': continuation_tp1,
-            'take_profit_2': continuation_tp2,
-            'take_profit_3': continuation_tp3,
-            'peak_5m': local5m_peak,
-            'htf_macro_peak': major1hSwingHigh,
-            'risk_points': risk_p,
-            'reward_points': reward_p,
-            'rr_ratio': rr_str
-        }
-
-        htf_ind = {
-            'type': 'BULLISH_INDICATION',
-            'direction': 'BULLISH',
-            'origin_price': local5m_low,
-            'extreme_price': local5m_peak,
-            'range': round(local_range, 2),
-            'equilibrium_50': local_50_eq,
-            'peak_5m': local5m_peak,
-            'macro_1h_peak': major1hSwingHigh
-        }
-
         return {
             'symbol': symbol_key,
             'timeframe': timeframe,
             'current_price': round(current_price, 2),
             'price_change_24h': round(latest_candle['close'] - candles[0]['open'], 2),
             'price_change_pct': round(((latest_candle['close'] - candles[0]['open']) / candles[0]['open']) * 100, 2),
-            'phase': 'PHASE_3_CONTINUATION' if icc_state['is_active_trade'] else 'PHASE_2_CORRECTION',
-            'phase_title': f"🚀 PHASE 3: CONTINUATION ARMED ({rr_str} RR)" if icc_state['is_active_trade'] else f"⏳ Phase 2: Pullback in Progress (Eq: {local_50_eq})",
-            'is_active_trade': icc_state['is_active_trade'],
-            'direction': 'BULLISH',
-            'setup_grade': icc_state.get('setup_grade', 'B'),
+            'phase': icc_state.get('phase', 'STANDBY'),
+            'phase_title': icc_state.get('phase_title', 'Standby'),
+            'is_active_trade': icc_state.get('is_active_trade', False),
+            'direction': icc_state.get('direction', 'NEUTRAL'),
+            'setup_grade': icc_state.get('setup_grade', 'F'),
             'grade_desc': icc_state.get('grade_desc', ''),
-            'confluence_score': icc_state['confluence_score'],
-            'indication': htf_ind,
-            'htf_indication': htf_ind,
-            'correction': icc_state['correction'],
-            'trade_plan': final_trade_plan,
+            'confluence_score': icc_state.get('confluence_score', 0),
+            'indication': icc_state.get('indication'),
+            'correction': icc_state.get('correction'),
+            'trade_plan': icc_state.get('trade_plan'),
             'indications_history': indications[-6:],
             'swing_highs': swing_highs[-8:],
             'swing_lows': swing_lows[-8:]
