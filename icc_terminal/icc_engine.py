@@ -372,33 +372,28 @@ class ICCEngine:
         htf_trend = 'BULLISH' if htf_bull else 'BEARISH'
         is_bull = htf_trend == 'BULLISH'
 
-        # 2. Extract 15M Swings for Protected SL (Major Structural Levels)
+        # 2. Extract 15M Swings for Protected SL (Dynamic 15-Minute Structural Swings)
         tf15_highs, tf15_lows = cls.find_swings(tf15_candles, window=2)
-        if symbol_key == 'MGC':
-            recent_15m_low = 4465.50
-        elif symbol_key == 'MNQ':
-            recent_15m_low = 29514.00
-        elif symbol_key == 'MES':
-            recent_15m_low = 7713.50
-        elif symbol_key == 'M2K':
-            recent_15m_low = 2967.80
+        valid_lows = [s['price'] for s in tf15_lows if s['price'] < current_price]
+        if valid_lows:
+            recent_15m_low = valid_lows[-1]
         else:
-            valid_lows = [s['price'] for s in tf15_lows if s['price'] < current_price]
-            recent_15m_low = valid_lows[-1] if valid_lows else (tf15_lows[-1]['price'] if tf15_lows else min([c['low'] for c in tf15_candles[-10:]]))
-            if recent_15m_low >= current_price:
-                recent_15m_low = min([c['low'] for c in candles[-40:]])
+            tf15_min = min([c['low'] for c in tf15_candles[-15:]]) if tf15_candles else min([c['low'] for c in candles[-40:]])
+            recent_15m_low = tf15_min if tf15_min < current_price else round(current_price - (current_price * 0.004), 2)
 
         valid_highs = [s['price'] for s in tf15_highs if s['price'] > current_price]
-        recent_15m_high = valid_highs[-1] if valid_highs else (tf15_highs[-1]['price'] if tf15_highs else max([c['high'] for c in tf15_candles[-10:]]))
-        if recent_15m_high <= current_price:
-            recent_15m_high = max([c['high'] for c in candles[-40:]])
+        if valid_highs:
+            recent_15m_high = valid_highs[-1]
+        else:
+            tf15_max = max([c['high'] for c in tf15_candles[-15:]]) if tf15_candles else max([c['high'] for c in candles[-40:]])
+            recent_15m_high = tf15_max if tf15_max > current_price else round(current_price + (current_price * 0.004), 2)
 
         # 3. Extract Indications and FILTER STRICTLY TO HTF TREND BIAS
         swing_highs, swing_lows = cls.find_swings(candles, window=2)
         raw_indications = cls.detect_indications(candles, swing_highs, swing_lows)
         aligned_indications = [ind for ind in raw_indications if ind['direction'] == htf_trend]
 
-        if not aligned_indications or symbol_key == 'MGC':
+        if not aligned_indications:
             min_l = min(c['low'] for c in candles)
             max_h = max(c['high'] for c in candles)
             rng = max_h - min_l

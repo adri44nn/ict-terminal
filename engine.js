@@ -418,28 +418,33 @@
       const isBullCandidate = hasBullMSS && recentBullFvgs.length > 0;
       const isBearCandidate = hasBearMSS && recentBearFvgs.length > 0;
 
+      const minStructRisk = symbol === 'MNQ' ? 15.0 : (symbol === 'MES' ? 4.0 : (symbol === 'M2K' ? 2.0 : 3.5));
+
       if (isBullCandidate) {
         const matchingFvg = recentBullFvgs.slice(-1)[0];
         if (matchingFvg) {
           const entry = matchingFvg.top;
-          const sl = matchingFvg.bottom - (spec.tick * 4);
-          const risk = Math.max(entry - sl, spec.tick * 4);
+          const priorLows = swingLows.filter(sl => sl.price < entry).map(sl => sl.price);
+          const structSl = priorLows.length > 0 ? priorLows[priorLows.length - 1] : (entry - minStructRisk);
+          const sl = Math.min(structSl, matchingFvg.bottom - (minStructRisk * 0.3));
+          const boundedSl = (entry - sl) < minStructRisk ? (entry - minStructRisk) : sl;
+          const risk = Math.max(entry - boundedSl, minStructRisk);
           
-          const validBsl = swingHighs.filter(sh => (sh.price - entry) >= (2.0 * risk)).map(sh => sh.price);
+          const validBsl = swingHighs.filter(sh => (sh.price - entry) >= (1.8 * risk) && (sh.price - entry) <= (4.5 * risk)).map(sh => sh.price);
           const target = validBsl.length > 0 ? validBsl[0] : (entry + (2.5 * risk));
           const reward = target - entry;
           const rr = risk > 0 ? reward / risk : 0;
 
           // ICT Filter: Setup is only ACTIVE if Target has NOT already been reached and SL not breached
           const targetAlreadyHit = currentPrice >= target;
-          const slBreached = currentPrice <= sl;
+          const slBreached = currentPrice <= boundedSl;
 
           if (rr >= 1.8 && !targetAlreadyHit && !slBreached) {
             tradePlan = {
               is_active: true,
               direction: "BULLISH",
               entry: Math.round(entry * 100) / 100,
-              stop_loss: Math.round(sl * 100) / 100,
+              stop_loss: Math.round(boundedSl * 100) / 100,
               take_profit: Math.round(target * 100) / 100,
               risk_points: Math.round(risk * 100) / 100,
               reward_points: Math.round(reward * 100) / 100,
@@ -447,32 +452,46 @@
             };
             setupGrade = isPrimeTime ? "A+" : "A";
             gradeBadge = isPrimeTime ? "GRADE_A_PLUS" : "GRADE_A";
-            gradeDesc = isPrimeTime ? "A+ Setup: Prime Killzone + 1:2+ RR Bullish FVG Model" : "A Setup: Valid Bullish FVG with 1:2+ RR";
+            gradeDesc = isPrimeTime ? `A+ Setup: Prime Killzone + 1:${rr.toFixed(2)} RR Bullish FVG Model` : `A Setup: Valid Bullish FVG with 1:${rr.toFixed(2)} RR`;
             setupType = "ICT 2022 Mentorship Model (Bullish Buy Limit)";
+          } else {
+            tradePlan = {
+              is_active: false,
+              direction: "BULLISH",
+              entry: Math.round(entry * 100) / 100,
+              stop_loss: Math.round(boundedSl * 100) / 100,
+              take_profit: Math.round(target * 100) / 100,
+              risk_points: Math.round(risk * 100) / 100,
+              reward_points: Math.round(reward * 100) / 100,
+              rr_ratio: `1:${rr.toFixed(2)}`
+            };
           }
         }
       } else if (isBearCandidate) {
         const matchingFvg = recentBearFvgs.slice(-1)[0];
         if (matchingFvg) {
           const entry = matchingFvg.bottom;
-          const sl = matchingFvg.top + (spec.tick * 4);
-          const risk = Math.max(sl - entry, spec.tick * 4);
+          const priorHighs = swingHighs.filter(sh => sh.price > entry).map(sh => sh.price);
+          const structSl = priorHighs.length > 0 ? priorHighs[priorHighs.length - 1] : (entry + minStructRisk);
+          const sl = Math.max(structSl, matchingFvg.top + (minStructRisk * 0.3));
+          const boundedSl = (sl - entry) < minStructRisk ? (entry + minStructRisk) : sl;
+          const risk = Math.max(boundedSl - entry, minStructRisk);
           
-          const validSsl = swingLows.filter(slItem => (entry - slItem.price) >= (2.0 * risk)).map(slItem => slItem.price);
+          const validSsl = swingLows.filter(slItem => (entry - slItem.price) >= (1.8 * risk) && (entry - slItem.price) <= (4.5 * risk)).map(slItem => slItem.price);
           const target = validSsl.length > 0 ? validSsl[0] : (entry - (2.5 * risk));
           const reward = entry - target;
           const rr = risk > 0 ? reward / risk : 0;
 
           // ICT Filter: Setup is only ACTIVE if Target has NOT already been reached and SL not breached
           const targetAlreadyHit = currentPrice <= target;
-          const slBreached = currentPrice >= sl;
+          const slBreached = currentPrice >= boundedSl;
 
           if (rr >= 1.8 && !targetAlreadyHit && !slBreached) {
             tradePlan = {
               is_active: true,
               direction: "BEARISH",
               entry: Math.round(entry * 100) / 100,
-              stop_loss: Math.round(sl * 100) / 100,
+              stop_loss: Math.round(boundedSl * 100) / 100,
               take_profit: Math.round(target * 100) / 100,
               risk_points: Math.round(risk * 100) / 100,
               reward_points: Math.round(reward * 100) / 100,
@@ -480,8 +499,19 @@
             };
             setupGrade = isPrimeTime ? "A+" : "A";
             gradeBadge = isPrimeTime ? "GRADE_A_PLUS" : "GRADE_A";
-            gradeDesc = isPrimeTime ? "A+ Setup: Prime Killzone + 1:2+ RR Bearish FVG Model" : "A Setup: Valid Bearish FVG with 1:2+ RR";
+            gradeDesc = isPrimeTime ? `A+ Setup: Prime Killzone + 1:${rr.toFixed(2)} RR Bearish FVG Model` : `A Setup: Valid Bearish FVG with 1:${rr.toFixed(2)} RR`;
             setupType = "ICT 2022 Mentorship Model (Bearish Sell Limit)";
+          } else {
+            tradePlan = {
+              is_active: false,
+              direction: "BEARISH",
+              entry: Math.round(entry * 100) / 100,
+              stop_loss: Math.round(boundedSl * 100) / 100,
+              take_profit: Math.round(target * 100) / 100,
+              risk_points: Math.round(risk * 100) / 100,
+              reward_points: Math.round(reward * 100) / 100,
+              rr_ratio: `1:${rr.toFixed(2)}`
+            };
           }
         }
       }
@@ -943,34 +973,26 @@
       const htfTrend = htfBull ? 'BULLISH' : 'BEARISH';
       const isBull = htfTrend === 'BULLISH';
 
-      // 2. Extract 15-Minute Swings for Protected SL (Major Structural Levels)
+      // 2. Extract 15-Minute Swings for Protected SL (Dynamic 15-Minute Structural Swings)
       const tf15Swings = this.findSwings(tf15Candles, 2);
       let recent15mLow = null;
-      if (symbol === 'MGC') {
-        recent15mLow = 4465.50;
-      } else if (symbol === 'MNQ') {
-        recent15mLow = 29514.00;
-      } else if (symbol === 'MES') {
-        recent15mLow = 7713.50;
-      } else if (symbol === 'M2K') {
-        recent15mLow = 2967.80;
-      } else {
-        if (tf15Swings.swingLows && tf15Swings.swingLows.length > 0) {
-          const validLows = tf15Swings.swingLows.filter(s => s.price < currentPrice);
-          recent15mLow = validLows.length > 0 ? validLows[validLows.length - 1].price : tf15Swings.swingLows[tf15Swings.swingLows.length - 1].price;
-        }
-        if (!recent15mLow || recent15mLow >= currentPrice) {
-          recent15mLow = Math.min(...candles.slice(-40).map(c => c.low));
-        }
+      if (tf15Swings.swingLows && tf15Swings.swingLows.length > 0) {
+        const validLows = tf15Swings.swingLows.filter(s => s.price < currentPrice);
+        recent15mLow = validLows.length > 0 ? validLows[validLows.length - 1].price : null;
+      }
+      if (!recent15mLow || recent15mLow >= currentPrice) {
+        const tf15Min = tf15Candles.length > 0 ? Math.min(...tf15Candles.slice(-15).map(c => c.low)) : Math.min(...candles.slice(-40).map(c => c.low));
+        recent15mLow = tf15Min < currentPrice ? tf15Min : Math.round((currentPrice * 0.996) * 100) / 100;
       }
 
       let recent15mHigh = null;
       if (tf15Swings.swingHighs && tf15Swings.swingHighs.length > 0) {
         const validHighs = tf15Swings.swingHighs.filter(s => s.price > currentPrice);
-        recent15mHigh = validHighs.length > 0 ? validHighs[validHighs.length - 1].price : tf15Swings.swingHighs[tf15Swings.swingHighs.length - 1].price;
+        recent15mHigh = validHighs.length > 0 ? validHighs[validHighs.length - 1].price : null;
       }
       if (!recent15mHigh || recent15mHigh <= currentPrice) {
-        recent15mHigh = Math.max(...candles.slice(-40).map(c => c.high));
+        const tf15Max = tf15Candles.length > 0 ? Math.max(...tf15Candles.slice(-15).map(c => c.high)) : Math.max(...candles.slice(-40).map(c => c.high));
+        recent15mHigh = tf15Max > currentPrice ? tf15Max : Math.round((currentPrice * 1.004) * 100) / 100;
       }
 
       // 3. Extract Indications and FILTER STRICTLY TO HTF TREND BIAS
@@ -978,7 +1000,7 @@
       const rawIndications = this.detectIndications(candles, ltfSwings.swingHighs, ltfSwings.swingLows);
       let alignedIndications = rawIndications.filter(ind => ind.direction === htfTrend);
 
-      if (alignedIndications.length === 0 || symbol === 'MGC') {
+      if (alignedIndications.length === 0) {
         const minL = Math.min(...candles.map(c => c.low));
         const maxH = Math.max(...candles.map(c => c.high));
         const rng = maxH - minL;
@@ -1254,14 +1276,14 @@
 
     // Base market references for micro futures contracts (live 2026 intraday prices & 15M swing structural levels)
     BASE_SPECS: {
-      "MNQ": { basePrice: 29742.50, tick: 0.25, volAvg: 2200, swingAmp: 45.0, intradayHigh: 29755.00, intradayLow: 29514.00 },
-      "MES": { basePrice: 7722.75, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7732.50, intradayLow: 7713.50 },
-      "M2K": { basePrice: 2973.30, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2980.50, intradayLow: 2967.80 },
-      "MGC": { basePrice: 4486.00, tick: 0.10, volAvg: 1200, swingAmp: 12.0, intradayHigh: 4488.50, intradayLow: 4465.50 }
+      "MNQ": { basePrice: 29588.75, tick: 0.25, volAvg: 2200, swingAmp: 35.0, intradayHigh: 29645.00, intradayLow: 29520.00 },
+      "MES": { basePrice: 7704.25, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7725.00, intradayLow: 7688.00 },
+      "M2K": { basePrice: 2968.30, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2980.00, intradayLow: 2955.00 },
+      "MGC": { basePrice: 4443.40, tick: 0.10, volAvg: 1200, swingAmp: 12.0, intradayHigh: 4465.00, intradayLow: 4425.00 }
     },
 
     generateFallbackCandles: function(symKey, count = 80, intervalMins = 5) {
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 4486.00, tick: 0.10, volAvg: 1200, swingAmp: 12.0, intradayHigh: 4488.50, intradayLow: 4465.50 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 29588.75, tick: 0.25, volAvg: 1200, swingAmp: 12.0, intradayHigh: 29645.00, intradayLow: 29520.00 };
       const now = Math.floor(Date.now() / 1000);
       const stepSecs = intervalMins * 60;
       const startTime = now - (count * stepSecs);
@@ -1313,7 +1335,7 @@
     },
 
     advanceCachedCandles: function(symKey, intervalMins = 5) {
-      const cacheKey = 'ict_live_candles_v9_' + symKey;
+      const cacheKey = 'ict_live_candles_v11_' + symKey;
       if (!this.candleCache[symKey] || this.candleCache[symKey].length === 0) {
         try {
           const stored = localStorage.getItem(cacheKey);
