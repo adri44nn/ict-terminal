@@ -1079,7 +1079,33 @@
         tfBadgeClass = 'mixed';
       }
 
-      // 5. TOP-DOWN ICC SYNTHESIS: Authentic Intraday Execution & Multi-TF Flow
+      // 5. TOP-DOWN ICC SYNTHESIS: 1-Hour Trend Bias Dictates Primary Direction
+      const htfTrend = (multiTfTrends['1h'] && multiTfTrends['1h'].direction !== 'NEUTRAL') ? multiTfTrends['1h'].direction : ((multiTfTrends['30m'] && multiTfTrends['30m'].direction !== 'NEUTRAL') ? multiTfTrends['30m'].direction : (currentPrice >= firstPrice ? 'BULLISH' : 'BEARISH'));
+      const isLtfAligned = (ltfState.direction === htfTrend);
+
+      let finalPhase = ltfState.phase;
+      let finalPhaseTitle = ltfState.phase_title;
+      let isActiveTrade = false;
+      let finalGrade = ltfState.setup_grade || 'B';
+      let finalGradeDesc = ltfState.grade_desc || '';
+      let finalTradePlan = ltfState.trade_plan;
+
+      if (isLtfAligned && ltfState.is_active_trade && ltfState.trade_plan) {
+        // 1H and 5M are FULLY ALIGNED in the same direction and 5M Continuation Trigger is armed!
+        isActiveTrade = true;
+        finalPhase = 'PHASE_3_CONTINUATION';
+        finalPhaseTitle = `🚀 PHASE 3: ${htfTrend} CONTINUATION ARMED (${ltfState.trade_plan.rr_ratio} RR)`;
+        finalGrade = (bullCount >= 3 || bearCount >= 3) ? 'A+' : 'A';
+        finalGradeDesc = `Aligned 1H ${htfTrend} Trend + 5M Confirmation Trigger (1:${ltfState.trade_plan.rr_ratio} RR)`;
+      } else {
+        // 5M is in pullback or waiting to align with 1H Macro Bias
+        isActiveTrade = false;
+        finalPhase = 'PHASE_2_CORRECTION';
+        finalPhaseTitle = `⏳ Phase 2: Pullback in Progress (Waiting for 5M to align with 1H ${htfTrend} Bias)`;
+        finalGrade = 'B';
+        finalGradeDesc = `1H Macro Bias is ${htfTrend}. Waiting for 5M discount pullback & continuation trigger.`;
+      }
+
       return {
         ...ltfState,
         symbol: symbol,
@@ -1087,6 +1113,12 @@
         current_price: currentPrice,
         price_change_24h: priceChange,
         price_change_pct: priceChangePct,
+        direction: htfTrend, // 1H Bias ALWAYS dictates the ICC tab card direction
+        phase: finalPhase,
+        phase_title: finalPhaseTitle,
+        is_active_trade: isActiveTrade,
+        setup_grade: finalGrade,
+        grade_desc: finalGradeDesc,
         multi_tf_trends: multiTfTrends,
         tf_alignment: {
           text: tfAlignmentText,
@@ -1095,7 +1127,8 @@
           bear_count: bearCount
         },
         indication: ltfState.indication,
-        trade_plan: ltfState.trade_plan
+        correction: ltfState.correction,
+        trade_plan: finalTradePlan
       };
     }
   };

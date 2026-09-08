@@ -419,33 +419,79 @@ class ICCEngine:
                 }
 
     @classmethod
+    def aggregate_candles(cls, candles: List[Dict[str, float]], factor: int) -> List[Dict[str, float]]:
+        if not candles or factor <= 1:
+            return candles
+        result = []
+        for i in range(0, len(candles), factor):
+            chunk = candles[i:i + factor]
+            if not chunk:
+                continue
+            result.append({
+                'time': chunk[0]['time'],
+                'open': chunk[0]['open'],
+                'high': max(c['high'] for c in chunk),
+                'low': min(c['low'] for c in chunk),
+                'close': chunk[-1]['close'],
+                'volume': sum(c.get('volume', 0) for c in chunk)
+            })
+        return result
+
+    @classmethod
     def analyze_symbol(cls, symbol_key: str, candles: List[Dict[str, float]], timeframe: str = '5m') -> Dict[str, Any]:
         if not candles or len(candles) < 10:
             return {'error': 'Insufficient candle data', 'symbol': symbol_key}
 
         latest_candle = candles[-1]
         current_price = latest_candle['close']
+        first_price = candles[0]['open']
 
+        # 1. Multi-Timeframe Candles
+        tf15_candles = cls.aggregate_candles(candles, 3)
+        tf30_candles = cls.aggregate_candles(candles, 6)
+        tf60_candles = cls.aggregate_candles(candles, 12)
+
+        # 2. Extract 5M LTF Lifecycle
         swing_highs, swing_lows = cls.find_swings(candles, window=2)
         indications = cls.detect_indications(candles, swing_highs, swing_lows)
-        icc_state = cls.evaluate_icc_lifecycle(candles, indications)
+        ltf_state = cls.evaluate_icc_lifecycle(candles, indications)
+
+        # 3. Extract 1H HTF Trend Direction
+        htf_candles = tf60_candles if len(tf60_candles) >= 3 else (tf30_candles if len(tf30_candles) >= 3 else candles)
+        htf_bull = htf_candles[-1]['close'] >= htf_candles[0]['open']
+        htf_trend = 'BULLISH' if htf_bull else 'BEARISH'
+
+        is_ltf_aligned = (ltf_state.get('direction') == htf_trend)
+        is_active = is_ltf_aligned and ltf_state.get('is_active_trade', False) and (ltf_state.get('trade_plan') is not None)
+
+        if is_active:
+            phase = 'PHASE_3_CONTINUATION'
+            rr_str = ltf_state.get('trade_plan', {}).get('rr_ratio', '2:1+')
+            phase_title = f"🚀 PHASE 3: {htf_trend} CONTINUATION ARMED ({rr_str} RR)"
+            setup_grade = ltf_state.get('setup_grade', 'A')
+            grade_desc = f"Aligned 1H {htf_trend} Trend + 5M Confirmation Trigger ({rr_str} RR)"
+        else:
+            phase = 'PHASE_2_CORRECTION'
+            phase_title = f"⏳ Phase 2: Pullback in Progress (Waiting for 5M to align with 1H {htf_trend} Bias)"
+            setup_grade = 'B'
+            grade_desc = f"1H Macro Bias is {htf_trend}. Waiting for 5M discount pullback & continuation trigger."
 
         return {
             'symbol': symbol_key,
             'timeframe': timeframe,
             'current_price': round(current_price, 2),
-            'price_change_24h': round(latest_candle['close'] - candles[0]['open'], 2),
-            'price_change_pct': round(((latest_candle['close'] - candles[0]['open']) / candles[0]['open']) * 100, 2),
-            'phase': icc_state.get('phase', 'STANDBY'),
-            'phase_title': icc_state.get('phase_title', 'Standby'),
-            'is_active_trade': icc_state.get('is_active_trade', False),
-            'direction': icc_state.get('direction', 'NEUTRAL'),
-            'setup_grade': icc_state.get('setup_grade', 'F'),
-            'grade_desc': icc_state.get('grade_desc', ''),
-            'confluence_score': icc_state.get('confluence_score', 0),
-            'indication': icc_state.get('indication'),
-            'correction': icc_state.get('correction'),
-            'trade_plan': icc_state.get('trade_plan'),
+            'price_change_24h': round(latest_candle['close'] - first_price, 2),
+            'price_change_pct': round(((latest_candle['close'] - first_price) / first_price) * 100, 2),
+            'phase': phase,
+            'phase_title': phase_title,
+            'is_active_trade': is_active,
+            'direction': htf_trend, # 1H Bias ALWAYS dictates the primary direction for the ICC tab
+            'setup_grade': setup_grade,
+            'grade_desc': grade_desc,
+            'confluence_score': ltf_state.get('confluence_score', 70) if is_active else 50,
+            'indication': ltf_state.get('indication'),
+            'correction': ltf_state.get('correction'),
+            'trade_plan': ltf_state.get('trade_plan'),
             'indications_history': indications[-6:],
             'swing_highs': swing_highs[-8:],
             'swing_lows': swing_lows[-8:]
