@@ -615,6 +615,52 @@ body {
 .plan-val.sl { color: var(--bearish); }
 .plan-val.tp { color: var(--bullish); }
 
+.risk-money-strip {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.risk-money-strip.standby {
+  justify-content: center;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+.risk-pill-badge {
+  color: #fca5a5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.reward-pill-badge {
+  color: #86efac;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.risk-pill-badge strong.val-loss {
+  color: #ef4444;
+  font-weight: 800;
+  font-size: 12px;
+}
+.reward-pill-badge strong.val-gain {
+  color: #10b981;
+  font-weight: 800;
+  font-size: 12px;
+}
+.risk-pill-badge .sub, .reward-pill-badge .sub {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
 .card-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

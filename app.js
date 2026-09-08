@@ -683,6 +683,43 @@ function renderScannerGrid(scanResults) {
       }
     }
 
+    const ptMultiplier = { 'MNQ': 2.0, 'MES': 5.0, 'M2K': 5.0, 'MGC': 10.0 }[sym] || 2.0;
+    let riskDollarsText = '';
+    let rewardDollarsText = '';
+    let riskMoneyStripHtml = '';
+
+    if (plan.entry && plan.stop_loss) {
+      const riskPts = Math.abs(plan.entry - plan.stop_loss);
+      const riskUsd = riskPts * ptMultiplier;
+      const targetVal = plan.take_profit || (isBull ? plan.entry + (riskPts * 2.5) : plan.entry - (riskPts * 2.5));
+      const rewardPts = Math.abs(targetVal - plan.entry);
+      const rewardUsd = rewardPts * ptMultiplier;
+
+      riskDollarsText = `<span style="font-size: 10px; color: #f87171; display: block; font-weight: 700;">(-$${riskUsd.toFixed(2)})</span>`;
+      rewardDollarsText = `<span style="font-size: 10px; color: #34d399; display: block; font-weight: 700;">(+$${rewardUsd.toFixed(2)})</span>`;
+
+      riskMoneyStripHtml = `
+        <div class="risk-money-strip">
+          <div class="risk-pill-badge" title="Maximum Risk on 1 Micro Contract to Structural SL">
+            <span class="label">🛡️ <strong>Risk (1ct):</strong></span>
+            <strong class="val-loss">-$${riskUsd.toFixed(2)}</strong>
+            <span class="sub">(${riskPts.toFixed(1)} pts @ $${ptMultiplier}/pt)</span>
+          </div>
+          <div class="reward-pill-badge" title="Target Reward on 1 Micro Contract">
+            <span class="label">🎯 <strong>Reward (1ct):</strong></span>
+            <strong class="val-gain">+$${rewardUsd.toFixed(2)}</strong>
+            <span class="sub">(${rewardPts.toFixed(1)} pts)</span>
+          </div>
+        </div>
+      `;
+    } else {
+      riskMoneyStripHtml = `
+        <div class="risk-money-strip standby">
+          <span style="color: var(--text-muted); font-size: 11px;">🛡️ Point Value: $${ptMultiplier.toFixed(2)}/pt | Risk calculated dynamically on setup trigger</span>
+        </div>
+      `;
+    }
+
     html += `
       <div class="scanner-card" id="ict-card-${sym}" style="${cardStyle}">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -729,13 +766,15 @@ function renderScannerGrid(scanResults) {
           </div>
           <div class="plan-cell">
             <div class="plan-label">Stop Loss</div>
-            <div class="plan-val sl">${plan.stop_loss !== null && plan.stop_loss !== undefined ? plan.stop_loss : '--'}</div>
+            <div class="plan-val sl">${plan.stop_loss !== null && plan.stop_loss !== undefined ? plan.stop_loss : '--'} ${riskDollarsText}</div>
           </div>
           <div class="plan-cell">
             <div class="plan-label">Target (${plan.rr_ratio && plan.rr_ratio !== '--' ? plan.rr_ratio + ' RR' : 'BSL/SSL'})</div>
-            <div class="plan-val tp">${plan.take_profit !== null && plan.take_profit !== undefined ? plan.take_profit : '--'}</div>
+            <div class="plan-val tp">${plan.take_profit !== null && plan.take_profit !== undefined ? plan.take_profit : '--'} ${rewardDollarsText}</div>
           </div>
         </div>
+
+        ${riskMoneyStripHtml}
 
         <div class="card-actions">
           <button class="btn btn-secondary" onclick="openSymbolInChart('${sym}')">
@@ -1004,20 +1043,66 @@ function renderIccScannerGrid(scanResults) {
           </div>
         </div>
 
-        <div class="trade-plan-box">
-          <div class="plan-cell">
-            <div class="plan-label">${isActiveTrade ? (isBull ? '🚀 Buy Limit' : '🔴 Sell Limit') : (d.phase === 'PHASE_2_CORRECTION' ? '⏳ 50% Eq Entry' : 'Planned Entry')}</div>
-            <div class="plan-val entry" title="Calculated Entry Price">${plan.entry !== null && plan.entry !== undefined ? plan.entry : (ind.equilibrium_50 || '--')}</div>
-          </div>
-          <div class="plan-cell">
-            <div class="plan-label">Protected SL (15M Swing)</div>
-            <div class="plan-val sl">${plan.stop_loss !== null && plan.stop_loss !== undefined ? plan.stop_loss : (ind.origin_price || '--')}</div>
-          </div>
-          <div class="plan-cell">
-            <div class="plan-label">Target TP1 (${plan.rr_ratio && plan.rr_ratio !== '--' ? plan.rr_ratio + ' RR' : '2:1+'})</div>
-            <div class="plan-val tp">${plan.take_profit_1 || plan.take_profit || (ind.extreme_price || '--')}</div>
-          </div>
-        </div>
+        ${(() => {
+          const ptMult = { 'MNQ': 2.0, 'MES': 5.0, 'M2K': 5.0, 'MGC': 10.0 }[sym] || 2.0;
+          const entryVal = plan.entry || ind.equilibrium_50;
+          const slVal = plan.stop_loss || ind.origin_price;
+          const tp1Val = plan.take_profit_1 || plan.take_profit || ind.extreme_price;
+
+          let riskSpan = '';
+          let rewardSpan = '';
+          let stripHtml = '';
+
+          if (entryVal && slVal) {
+            const rPts = Math.abs(entryVal - slVal);
+            const rUsd = rPts * ptMult;
+            const rewPts = tp1Val ? Math.abs(tp1Val - entryVal) : (rPts * 1.5);
+            const rewUsd = rewPts * ptMult;
+
+            riskSpan = `<span style="font-size: 10px; color: #f87171; display: block; font-weight: 700;">(-$${rUsd.toFixed(2)})</span>`;
+            rewardSpan = `<span style="font-size: 10px; color: #34d399; display: block; font-weight: 700;">(+$${rewUsd.toFixed(2)})</span>`;
+
+            stripHtml = `
+              <div class="risk-money-strip">
+                <div class="risk-pill-badge" title="Maximum Risk on 1 Micro Contract to 15M Swing SL">
+                  <span class="label">🛡️ <strong>15M SL Risk (1ct):</strong></span>
+                  <strong class="val-loss">-$${rUsd.toFixed(2)}</strong>
+                  <span class="sub">(${rPts.toFixed(1)} pts @ $${ptMult}/pt)</span>
+                </div>
+                <div class="reward-pill-badge" title="Target Reward on 1 Micro Contract to TP1">
+                  <span class="label">🎯 <strong>TP1 Gain (1ct):</strong></span>
+                  <strong class="val-gain">+$${rewUsd.toFixed(2)}</strong>
+                  <span class="sub">(${rewPts.toFixed(1)} pts)</span>
+                </div>
+              </div>
+            `;
+          } else {
+            stripHtml = `
+              <div class="risk-money-strip standby">
+                <span style="color: var(--text-muted); font-size: 11px;">🛡️ Multiplier: $${ptMult.toFixed(2)}/pt | 15M Swing SL Risk calculated dynamically</span>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="trade-plan-box">
+              <div class="plan-cell">
+                <div class="plan-label">${isActiveTrade ? (isBull ? '🚀 Buy Limit' : '🔴 Sell Limit') : (d.phase === 'PHASE_2_CORRECTION' ? '⏳ 50% Eq Entry' : 'Planned Entry')}</div>
+                <div class="plan-val entry" title="Calculated Entry Price">${plan.entry !== null && plan.entry !== undefined ? plan.entry : (ind.equilibrium_50 || '--')}</div>
+              </div>
+              <div class="plan-cell">
+                <div class="plan-label">Protected SL (15M Swing)</div>
+                <div class="plan-val sl">${plan.stop_loss !== null && plan.stop_loss !== undefined ? plan.stop_loss : (ind.origin_price || '--')} ${riskSpan}</div>
+              </div>
+              <div class="plan-cell">
+                <div class="plan-label">Target TP1 (${plan.rr_ratio && plan.rr_ratio !== '--' ? plan.rr_ratio + ' RR' : '1:1.5+'})</div>
+                <div class="plan-val tp">${plan.take_profit_1 || plan.take_profit || (ind.extreme_price || '--')} ${rewardSpan}</div>
+              </div>
+            </div>
+
+            ${stripHtml}
+          `;
+        })()}
 
         <div style="font-size: 10.5px; color: var(--text-muted); background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(6, 182, 212, 0.2); padding: 7px 10px; border-radius: 6px; margin-bottom: 10px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px;">
           <span>🎯 <strong>${isBull ? 'Peak (TP1)' : 'Low (TP1)'}:</strong> ${plan.take_profit_1 || ind.extreme_price || '--'}</span>
