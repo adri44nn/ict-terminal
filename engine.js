@@ -1051,54 +1051,50 @@
         tfBadgeClass = 'mixed';
       }
 
-      // 5. TOP-DOWN ICC SYNTHESIS: 1H Macro Targets with 5M Execution
-      // Use 1H Macro Swing High / Peak as the Primary TP1 Target (Draw on Liquidity)
+      // 5. TOP-DOWN ICC SYNTHESIS: 1H Macro Targets with 5M Execution (Trades by Sci Core Framework)
       const htf1hCandles = tf60Candles.length >= 4 ? tf60Candles : (tf30Candles.length >= 4 ? tf30Candles : candles);
       const htf1hHighs = htf1hCandles.map(c => c.high);
       const htf1hLows = htf1hCandles.map(c => c.low);
       const major1hSwingHigh = htf1hHighs.length > 0 ? Math.max(...htf1hHighs) : currentPrice;
       const major1hSwingLow = htf1hLows.length > 0 ? Math.min(...htf1hLows) : currentPrice;
 
-      const activeInd = latestHtfInd || ltfState.indication || (ltfIndications.length > 0 ? ltfIndications[ltfIndications.length - 1] : null);
-      const isBullActive = (activeInd ? activeInd.direction : (ltfState.direction || 'BULLISH')) === 'BULLISH';
+      const lowestIdx = htf1hCandles.findIndex(c => c.low === major1hSwingLow);
+      const highestIdx = htf1hCandles.findIndex(c => c.high === major1hSwingHigh);
 
-      // 1H Peak Draw on Liquidity (e.g. 4558.5 on Gold)
-      let macroTp1 = isBullActive ? (major1hSwingHigh > currentPrice ? major1hSwingHigh : (activeInd ? activeInd.extreme_price : currentPrice))
-                                  : (major1hSwingLow < currentPrice ? major1hSwingLow : (activeInd ? activeInd.extreme_price : currentPrice));
+      // Macro Structure Bias (Trades by Sci):
+      // If highest 1H high is above current price or occurred after lowest low, Macro is BULLISH
+      const isMacroBull = highestIdx >= lowestIdx || currentPrice > (major1hSwingLow + (major1hSwingHigh - major1hSwingLow) * 0.35);
 
-      let macroOrigin = activeInd ? activeInd.origin_price : (isBullActive ? major1hSwingLow : major1hSwingHigh);
-      let macroRange = Math.max(Math.abs(macroTp1 - macroOrigin), 10.0);
-      let macroEq = isBullActive ? Math.round((macroOrigin + (macroRange * 0.5)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.5)) * 100) / 100;
+      // 1H Swing High Draw on Liquidity is ALWAYS the primary TP1 target for longs (e.g. 4558.5 on Gold)
+      const macroTp1 = isMacroBull ? major1hSwingHigh : major1hSwingLow;
+      const macroOrigin = isMacroBull ? major1hSwingLow : major1hSwingHigh;
+      const macroRange = Math.max(Math.abs(major1hSwingHigh - major1hSwingLow), 10.0);
+      const macroEq = isMacroBull ? Math.round((macroOrigin + (macroRange * 0.5)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.5)) * 100) / 100;
 
-      let macroTp2 = isBullActive ? Math.round((macroTp1 + (macroRange * 0.5)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 0.5)) * 100) / 100;
-      let macroTp3 = isBullActive ? Math.round((macroTp1 + (macroRange * 1.0)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 1.0)) * 100) / 100;
+      // Multi-Level Expansion Targets (Trades by Sci 1:2 and 1:3 runners):
+      const macroTp2 = isMacroBull ? Math.round((major1hSwingHigh + (macroRange * 0.25)) * 100) / 100 : Math.round((major1hSwingLow - (macroRange * 0.25)) * 100) / 100;
+      const macroTp3 = isMacroBull ? Math.round((major1hSwingHigh + (macroRange * 0.50)) * 100) / 100 : Math.round((major1hSwingLow - (macroRange * 0.50)) * 100) / 100;
 
-      const oteMacroSl = isBullActive ? Math.round((macroOrigin + (macroRange * 0.25)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.25)) * 100) / 100;
+      const oteMacroSl = isMacroBull ? Math.round((macroOrigin + (macroRange * 0.25)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.25)) * 100) / 100;
 
       // Merge 1H Macro targets into the active trade plan
-      const finalTradePlan = ltfState.trade_plan || {
-        is_active: false,
-        direction: activeInd ? activeInd.direction : 'NEUTRAL',
-        entry: macroEq,
-        stop_loss: oteMacroSl,
+      const finalTradePlan = {
+        is_active: ltfState.is_active_trade || false,
+        direction: isMacroBull ? 'BULLISH' : 'BEARISH',
+        action: ltfState.is_active_trade ? 'ACTIVE CONTINUATION' : 'PULLBACK IN PROGRESS',
+        entry: (ltfState.is_active_trade && ltfState.trade_plan && ltfState.trade_plan.entry) ? ltfState.trade_plan.entry : macroEq,
+        stop_loss: (ltfState.is_active_trade && ltfState.trade_plan && ltfState.trade_plan.stop_loss) ? ltfState.trade_plan.stop_loss : oteMacroSl,
         take_profit: macroTp1,
         take_profit_1: macroTp1,
         take_profit_2: macroTp2,
         take_profit_3: macroTp3,
+        htf_tp1_extreme: macroTp1,
+        htf_origin: macroOrigin,
+        htf_equilibrium: macroEq,
+        risk_points: 0,
+        reward_points: 0,
         rr_ratio: '--'
       };
-
-      if (!finalTradePlan.stop_loss || finalTradePlan.stop_loss === macroOrigin) {
-        finalTradePlan.stop_loss = oteMacroSl;
-      }
-
-      // Always anchor TP1 to the 1H/HTF Indication Extreme
-      finalTradePlan.take_profit_1 = macroTp1;
-      finalTradePlan.take_profit_2 = macroTp2;
-      finalTradePlan.take_profit_3 = macroTp3;
-      finalTradePlan.htf_tp1_extreme = macroTp1;
-      finalTradePlan.htf_origin = macroOrigin;
-      finalTradePlan.htf_equilibrium = macroEq;
 
       if (finalTradePlan.entry && finalTradePlan.stop_loss && finalTradePlan.take_profit_1) {
         const risk = Math.max(Math.abs(finalTradePlan.entry - finalTradePlan.stop_loss), 1.0);
@@ -1109,18 +1105,21 @@
       }
 
       const htfIndicationSummary = {
-        type: isBullActive ? 'BULLISH_INDICATION' : 'BEARISH_INDICATION',
-        direction: isBullActive ? 'BULLISH' : 'BEARISH',
+        type: isMacroBull ? 'BULLISH_INDICATION' : 'BEARISH_INDICATION',
+        direction: isMacroBull ? 'BULLISH' : 'BEARISH',
         origin_price: macroOrigin,
         extreme_price: macroTp1,
         range: Math.round(macroRange * 100) / 100,
         equilibrium_50: macroEq,
-        retrace_382: isBullActive ? Math.round((macroTp1 - (macroRange * 0.382)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.382)) * 100) / 100,
-        retrace_618: isBullActive ? Math.round((macroTp1 - (macroRange * 0.618)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.618)) * 100) / 100
+        retrace_382: isMacroBull ? Math.round((macroTp1 - (macroRange * 0.382)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.382)) * 100) / 100,
+        retrace_618: isMacroBull ? Math.round((macroTp1 - (macroRange * 0.618)) * 100) / 100 : Math.round((macroOrigin - (macroRange * 0.618)) * 100) / 100
       };
 
       return {
         ...ltfState,
+        direction: isMacroBull ? 'BULLISH' : (ltfState.direction || 'BULLISH'),
+        phase: ltfState.is_active_trade ? 'PHASE_3_CONTINUATION' : 'PHASE_2_CORRECTION',
+        phase_title: ltfState.is_active_trade ? `🚀 PHASE 3: CONTINUATION ARMED (${finalTradePlan.rr_ratio} RR)` : `⏳ Phase 2: Pullback in Progress (Eq: ${macroEq})`,
         symbol: symbol,
         timeframe: "5m",
         current_price: currentPrice,
