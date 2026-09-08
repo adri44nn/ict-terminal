@@ -760,23 +760,23 @@ function renderIccScannerGrid(scanResults) {
 
         <div class="trade-plan-box">
           <div class="plan-cell">
-            <div class="plan-label">${isActiveTrade ? 'Limit Entry' : 'Entry / 50% Eq'}</div>
+            <div class="plan-label">${isActiveTrade ? '5M Limit Entry' : 'Entry / 50% Eq'}</div>
             <div class="plan-val entry">${plan.entry !== null && plan.entry !== undefined ? plan.entry : (ind.equilibrium_50 || '--')}</div>
           </div>
           <div class="plan-cell">
-            <div class="plan-label">${isActiveTrade ? 'Stop Loss' : 'Origin SL'}</div>
+            <div class="plan-label">${isActiveTrade ? '5M Stop Loss' : '1H Origin SL'}</div>
             <div class="plan-val sl">${plan.stop_loss !== null && plan.stop_loss !== undefined ? plan.stop_loss : (ind.origin_price || '--')}</div>
           </div>
           <div class="plan-cell">
-            <div class="plan-label">Target (${plan.rr_ratio && plan.rr_ratio !== '--' ? plan.rr_ratio + ' RR' : 'TP1 Target'})</div>
-            <div class="plan-val tp">${plan.take_profit !== null && plan.take_profit !== undefined ? plan.take_profit : (plan.tp1_indication_high || plan.tp1_indication_low || plan.take_profit_1 || ind.extreme_price || '--')}</div>
+            <div class="plan-label">1H Macro TP1 (${plan.rr_ratio && plan.rr_ratio !== '--' ? plan.rr_ratio + ' RR' : '1H Peak'})</div>
+            <div class="plan-val tp">${plan.take_profit_1 || plan.take_profit || ind.extreme_price || '--'}</div>
           </div>
         </div>
 
-        <div style="font-size: 10.5px; color: var(--text-muted); background: rgba(15, 23, 42, 0.6); padding: 6px 10px; border-radius: 6px; margin-bottom: 10px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px;">
-          <span>🎯 <strong>TP1 (Extreme):</strong> ${plan.tp1_indication_high || plan.tp1_indication_low || plan.take_profit_1 || ind.extreme_price || '--'}</span>
-          <span>🚀 <strong>TP2 (1:2):</strong> ${plan.tp2_expansion || plan.take_profit_2 || '--'}</span>
-          <span>💎 <strong>TP3 (1:3):</strong> ${plan.tp3_runner || plan.take_profit_3 || '--'}</span>
+        <div style="font-size: 10.5px; color: var(--text-muted); background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(6, 182, 212, 0.2); padding: 7px 10px; border-radius: 6px; margin-bottom: 10px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px;">
+          <span>🎯 <strong>1H TP1 (Peak/Low):</strong> ${plan.take_profit_1 || ind.extreme_price || '--'}</span>
+          <span>🚀 <strong>1H TP2 (1:2):</strong> ${plan.take_profit_2 || '--'}</span>
+          <span>💎 <strong>1H TP3 (1:3 Runner):</strong> ${plan.take_profit_3 || '--'}</span>
         </div>
 
         <div class="card-actions">

@@ -909,7 +909,7 @@
           price_change_24h: 0,
           price_change_pct: 0,
           phase: 'STANDBY',
-          phase_title: 'Standby (Scanning for Indication Impulse)',
+          phase_title: 'Standby (Scanning for 1H Indication Impulse)',
           is_active_trade: false,
           direction: 'NEUTRAL',
           setup_grade: 'F',
@@ -933,16 +933,22 @@
       const priceChange = Math.round((currentPrice - firstPrice) * 100) / 100;
       const priceChangePct = Math.round(((currentPrice - firstPrice) / firstPrice) * 10000) / 100;
 
-      const { swingHighs, swingLows } = this.findSwings(candles, 2);
-      const indications = this.detectIndications(candles, swingHighs, swingLows);
-      const iccState = this.evaluateIccLifecycle(candles, indications);
-
-      // Multi-Timeframe Trend Calculation (5m, 15m, 30m, 1h)
+      // 1. Generate Multi-Timeframe Candle Sets (5m, 15m, 30m, 1h)
       const tf15Candles = this.aggregateCandles(candles, 3);
       const tf30Candles = this.aggregateCandles(candles, 6);
       const tf60Candles = this.aggregateCandles(candles, 12);
 
-      const tf5State = iccState;
+      // 2. Extract 1-HOUR (HTF) INDICATION & MACRO TARGETS (Trades by Sci Core Architecture)
+      const htfSwings = this.findSwings(tf60Candles.length >= 4 ? tf60Candles : tf30Candles, 1);
+      const htfIndications = this.detectIndications(tf60Candles.length >= 4 ? tf60Candles : tf30Candles, htfSwings.swingHighs, htfSwings.swingLows);
+      const latestHtfInd = htfIndications.length > 0 ? htfIndications[htfIndications.length - 1] : null;
+
+      // 3. Extract 5-MINUTE (LTF) INDICATION & EXECUTION
+      const ltfSwings = this.findSwings(candles, 2);
+      const ltfIndications = this.detectIndications(candles, ltfSwings.swingHighs, ltfSwings.swingLows);
+      const ltfState = this.evaluateIccLifecycle(candles, ltfIndications);
+
+      // 4. Multi-Timeframe Trend State Calculation
       const tf15State = tf15Candles.length >= 5 ? this.evaluateIccLifecycle(tf15Candles, this.detectIndications(tf15Candles, this.findSwings(tf15Candles, 2).swingHighs, this.findSwings(tf15Candles, 2).swingLows)) : null;
       const tf30State = tf30Candles.length >= 4 ? this.evaluateIccLifecycle(tf30Candles, this.detectIndications(tf30Candles, this.findSwings(tf30Candles, 2).swingHighs, this.findSwings(tf30Candles, 2).swingLows)) : null;
       const tf60State = tf60Candles.length >= 3 ? this.evaluateIccLifecycle(tf60Candles, this.detectIndications(tf60Candles, this.findSwings(tf60Candles, 1).swingHighs, this.findSwings(tf60Candles, 1).swingLows)) : null;
@@ -971,7 +977,7 @@
       }
 
       const multiTfTrends = {
-        '5m': getTfSummary(tf5State, candles),
+        '5m': getTfSummary(ltfState, candles),
         '15m': getTfSummary(tf15State, tf15Candles),
         '30m': getTfSummary(tf30State, tf30Candles),
         '1h': getTfSummary(tf60State, tf60Candles)
@@ -1003,6 +1009,44 @@
         tfBadgeClass = 'mixed';
       }
 
+      // 5. TOP-DOWN ICC SYNTHESIS: 1H Macro Targets with 5M Execution
+      // If 1H Indication exists, use 1H Indication Peak/Low as the Primary TP1 Target
+      const activeInd = latestHtfInd || ltfState.indication || (ltfIndications.length > 0 ? ltfIndications[ltfIndications.length - 1] : null);
+      let macroTp1 = activeInd ? activeInd.extreme_price : currentPrice;
+      let macroOrigin = activeInd ? activeInd.origin_price : currentPrice;
+      let macroEq = activeInd ? activeInd.equilibrium_50 : currentPrice;
+      let macroRange = activeInd ? activeInd.range : 10.0;
+
+      let macroTp2 = activeInd ? (activeInd.direction === 'BULLISH' ? Math.round((macroTp1 + (macroRange * 0.5)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 0.5)) * 100) / 100) : currentPrice;
+      let macroTp3 = activeInd ? (activeInd.direction === 'BULLISH' ? Math.round((macroTp1 + (macroRange * 1.0)) * 100) / 100 : Math.round((macroTp1 - (macroRange * 1.0)) * 100) / 100) : currentPrice;
+
+      // Merge 1H Macro targets into the active trade plan
+      const finalTradePlan = ltfState.trade_plan || {
+        is_active: false,
+        direction: activeInd ? activeInd.direction : 'NEUTRAL',
+        entry: macroEq,
+        stop_loss: macroOrigin,
+        take_profit: macroTp1,
+        take_profit_1: macroTp1,
+        take_profit_2: macroTp2,
+        take_profit_3: macroTp3,
+        rr_ratio: '--'
+      };
+
+      // Always anchor TP1 to the 1H/HTF Indication Extreme
+      finalTradePlan.take_profit_1 = macroTp1;
+      finalTradePlan.take_profit_2 = macroTp2;
+      finalTradePlan.take_profit_3 = macroTp3;
+      finalTradePlan.htf_tp1_extreme = macroTp1;
+      finalTradePlan.htf_origin = macroOrigin;
+      finalTradePlan.htf_equilibrium = macroEq;
+
+      if (finalTradePlan.entry && finalTradePlan.stop_loss && finalTradePlan.take_profit_1) {
+        const risk = Math.max(Math.abs(finalTradePlan.entry - finalTradePlan.stop_loss), 0.5);
+        const reward = Math.abs(finalTradePlan.take_profit_1 - finalTradePlan.entry);
+        finalTradePlan.rr_ratio = `1:${(reward / risk).toFixed(2)}`;
+      }
+
       return {
         symbol: symbol,
         timeframe: "5m",
@@ -1016,7 +1060,9 @@
           bull_count: bullCount,
           bear_count: bearCount
         },
-        ...iccState
+        ...ltfState,
+        htf_indication: activeInd,
+        trade_plan: finalTradePlan
       };
     }
   };
