@@ -257,64 +257,234 @@ async function fetchScan() {
   try {
     if (window.MarketData) {
       const data = await window.MarketData.fetchAllSymbolsData();
-      STATE.scanData = { scan_results: data.ictScanResults, killzone: data.killzone };
-      STATE.iccScanData = { scan_results: data.iccScanResults };
-      renderScannerGrid(data.ictScanResults || {});
-      renderIccScannerGrid(data.iccScanResults || {});
-      updateRibbonPrices(data.ictScanResults || {});
-
-      // Populate Live Algorithmic Alerts Stream
-      const clientAlerts = [];
-      const nyTime = window.ICTEngine ? window.ICTEngine.getNyTime().timeStr.split(' ')[0] : new Date().toLocaleTimeString();
-      for (const [sym, info] of Object.entries(data.ictScanResults || {})) {
-        if (info.is_active_trade || info.confluence_score >= 35) {
-          const plan = info.trade_plan || {};
-          clientAlerts.push({
-            time_str: nyTime,
-            symbol: sym,
-            timeframe: info.timeframe || '5m',
-            setup_grade: info.setup_grade || 'B',
-            setup_type: info.setup_type || 'ICT Order Flow',
-            direction: info.direction || 'BULLISH',
-            confluence: info.confluence_score || 50,
-            entry: plan.entry !== undefined && plan.entry !== null ? plan.entry : info.current_price,
-            tp: plan.take_profit !== undefined && plan.take_profit !== null ? plan.take_profit : (plan.target_bsl || plan.target_ssl || '--')
-          });
-        }
-      }
-      renderAlertsTable(clientAlerts);
-      return;
-    }
-  } catch (e) {
-    console.warn("Client-side scan, attempting API fallback", e);
+window.switchTab = function(tabId) {
+  const tabBtns = document.querySelectorAll('.nav-tab-btn');
+  tabBtns.forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-tab') === tabId);
+  });
+  document.querySelectorAll('.tab-view').forEach(view => {
+    view.classList.toggle('active', view.id === tabId);
+  });
+  STATE.activeTab = tabId;
+  if (tabId === 'chartTab') {
+    setTimeout(renderCanvasChart, 50);
   }
+  if (tabId === 'iccTab') {
+    fetchIccScan();
+  }
+};
 
-  try {
-    const res = await fetch('/api/scan');
-    const data = await res.json();
-    STATE.scanData = data;
-    renderScannerGrid(data.scan_results || {});
-    renderAlertsTable(data.alerts || []);
-    updateRibbonPrices(data.scan_results || {});
-  } catch (e) {}
+window.jumpToSymbolCard = function(tabName, cardId) {
+  window.switchTab(tabName);
+  setTimeout(() => {
+    window.scrollToCard(cardId);
+  }, 120);
+};
+
+function updateGlobalSignalRibbon(ictResults, iccResults) {
+  const ribbon = document.getElementById('tickerRibbon');
+  if (!ribbon) return;
+
+  const defaultSymbols = ['MNQ', 'MES', 'M2K', 'MGC'];
+  const symbols = [...defaultSymbols];
+
+  // Evaluate highest priority status for each symbol
+  const symbolSummaries = symbols.map(sym => {
+    const ict = ictResults[sym] || {};
+    const icc = iccResults[sym] || {};
+    const currPrice = ict.current_price || icc.current_price || (window.MarketData && window.MarketData.BASE_SPECS[sym] ? window.MarketData.BASE_SPECS[sym].basePrice : 0);
+    const chgPct = ict.price_change_pct !== undefined ? ict.price_change_pct : (icc.price_change_pct || 0);
+
+    let priority = 1; // 1 = standby, 5 = pullback/forming, 10 = active trade
+    let bestModel = 'ict';
+    let targetTab = 'scannerTab';
+    let targetCardId = `ict-card-${sym}`;
+    let statusClass = 'standby';
+    let statusLabel = '👀 NO TRADE';
+    let highlightClass = '';
+
+    // Check ICT Active Trade
+    if (ict.is_active_trade && ict.trade_plan && ict.trade_plan.entry) {
+      const inZone = Math.abs(currPrice - ict.trade_plan.entry) <= (sym === 'MNQ' ? 3.0 : 1.0);
+      priority = 10;
+      bestModel = 'ict';
+      targetTab = 'scannerTab';
+      targetCardId = `ict-card-${sym}`;
+      statusClass = inZone ? 'entry' : 'armed';
+      statusLabel = inZone ? '🚀 IN ZONE' : `⚡ ARMED (${ict.trade_plan.rr_ratio || '1:2+'})`;
+      highlightClass = 'has-trade';
+    } 
+    // Check ICC Active Continuation Trade
+    else if (icc.is_active_trade && icc.trade_plan && icc.trade_plan.entry) {
+      priority = 10;
+      bestModel = 'icc';
+      targetTab = 'iccTab';
+      targetCardId = `icc-card-${sym}`;
+      statusClass = 'armed';
+      statusLabel = `🚀 ARMED (${icc.trade_plan.rr_ratio || '1:2.5'})`;
+      highlightClass = 'has-trade-icc';
+    } 
+    // Check ICC Phase 2 Pullback / Golden Zone Retrace
+    else if (icc.phase === 'PHASE_2_CORRECTION') {
+      priority = 5;
+      bestModel = 'icc';
+      targetTab = 'iccTab';
+      targetCardId = `icc-card-${sym}`;
+      statusClass = 'pullback';
+      const retrace = icc.correction && icc.correction.retrace_pct !== undefined ? `${icc.correction.retrace_pct}%` : '50% Eq';
+      statusLabel = `⏳ PULLBACK (${retrace})`;
+    }
+    // Check ICT High Confluence Forming
+    else if (ict.confluence_score >= 45) {
+      priority = 4;
+      bestModel = 'ict';
+      targetTab = 'scannerTab';
+      targetCardId = `ict-card-${sym}`;
+      statusClass = 'pullback';
+      statusLabel = `⏳ FORMING (${ict.confluence_score}%)`;
+    }
+    // Check ICC Phase 1 Impulse
+    else if (icc.phase === 'PHASE_1_INDICATION') {
+      priority = 3;
+      bestModel = 'icc';
+      targetTab = 'iccTab';
+      targetCardId = `icc-card-${sym}`;
+      statusClass = 'pullback';
+      statusLabel = `⚡ IMPULSE`;
+    }
+
+    return {
+      sym,
+      currPrice,
+      chgPct,
+      priority,
+      bestModel,
+      targetTab,
+      targetCardId,
+      statusClass,
+      statusLabel,
+      highlightClass
+    };
+  });
+
+  // POP UP SYMBOLS WITH TRADES TO THE FRONT OF THE LINE
+  symbolSummaries.sort((a, b) => {
+    if (a.priority !== b.priority) return b.priority - a.priority; // Higher priority to the front
+    return defaultSymbols.indexOf(a.sym) - defaultSymbols.indexOf(b.sym);
+  });
+
+  let html = '';
+  symbolSummaries.forEach(s => {
+    const isUp = s.chgPct >= 0;
+    html += `
+      <div class="ticker-item ${s.highlightClass}" onclick="jumpToSymbolCard('${s.targetTab}', '${s.targetCardId}')" title="Click to jump directly to ${s.sym} card in ${s.bestModel.toUpperCase()} Scanner">
+        <div class="ticker-item-left">
+          <div class="ticker-symbol-row">
+            <span class="ticker-symbol">${s.sym}</span>
+            <span class="ticker-model-badge ${s.bestModel}">${s.bestModel.toUpperCase()}</span>
+          </div>
+          <div class="ticker-status-badge ${s.statusClass}">
+            ${s.statusLabel}
+          </div>
+        </div>
+        <div class="ticker-price-box">
+          <div class="ticker-price" id="ribbon-price-${s.sym}">${s.currPrice ? s.currPrice.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '--'}</div>
+          <div class="ticker-change ${isUp ? 'up' : 'down'}" id="ribbon-chg-${s.sym}">${isUp ? '+' : ''}${s.chgPct}%</div>
+        </div>
+      </div>
+    `;
+  });
+
+  ribbon.innerHTML = html;
 }
 
 function updateRibbonPrices(scanResults) {
-  for (const [sym, info] of Object.entries(scanResults)) {
-    const priceEl = document.getElementById(`ribbon-price-${sym}`);
-    const chgEl = document.getElementById(`ribbon-chg-${sym}`);
-    if (priceEl && info.current_price) {
-      priceEl.textContent = info.current_price.toLocaleString(undefined, { minimumFractionDigits: 2 });
-    }
-    if (chgEl && info.price_change_pct !== undefined) {
-      const isUp = info.price_change_pct >= 0;
-      chgEl.textContent = `${isUp ? '+' : ''}${info.price_change_pct}%`;
-      chgEl.className = `ticker-change ${isUp ? 'up' : 'down'}`;
-    }
+  // Legacy alias forwarded to global signal ribbon
+  if (STATE.scanData && STATE.iccScanData) {
+    updateGlobalSignalRibbon(STATE.scanData.scan_results || scanResults, STATE.iccScanData.scan_results || {});
   }
 }
 
+function renderQuickStatusBar(containerId, scanResults, modelType) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const defaultSymbols = ['MNQ', 'MES', 'M2K', 'MGC'];
+  const symbols = Object.keys(scanResults).length > 0 ? Object.keys(scanResults) : defaultSymbols;
+
+  // Front of the line: active trades first
+  const sorted = [...symbols].sort((a, b) => {
+    const activeA = scanResults[a] && scanResults[a].is_active_trade ? 1 : 0;
+    const activeB = scanResults[b] && scanResults[b].is_active_trade ? 1 : 0;
+    if (activeA !== activeB) return activeB - activeA;
+    return defaultSymbols.indexOf(a) - defaultSymbols.indexOf(b);
+  });
+
+  let html = '';
+  sorted.forEach(sym => {
+    const d = scanResults[sym] || {};
+    const isActive = d.is_active_trade === true;
+    const plan = d.trade_plan || {};
+    const currPrice = d.current_price || 0;
+    
+    let statusClass = 'status-standby';
+    let statusLabel = '👀 NO TRADE';
+
+    if (modelType === 'ict') {
+      if (isActive && plan.entry) {
+        const inZone = Math.abs(currPrice - plan.entry) <= (sym === 'MNQ' ? 3.0 : 1.0);
+        if (inZone) {
+          statusClass = 'status-entry';
+          statusLabel = '🚀 IN ZONE (ENTRY)';
+        } else {
+          statusClass = 'status-armed';
+          statusLabel = `⚡ ARMED (${plan.rr_ratio || '1:2+'})`;
+        }
+      } else if (d.confluence_score >= 45) {
+        statusClass = 'status-pullback';
+        statusLabel = `⏳ FORMING (${d.confluence_score}%)`;
+      }
+    } else {
+      // ICC Model
+      if (isActive && plan.entry) {
+        statusClass = 'status-armed';
+        statusLabel = `🚀 ARMED (${plan.rr_ratio || '1:2.5'})`;
+      } else if (d.phase === 'PHASE_2_CORRECTION') {
+        statusClass = 'status-pullback';
+        const retrace = d.correction && d.correction.retrace_pct !== undefined ? `${d.correction.retrace_pct}%` : '50% Eq';
+        statusLabel = `⏳ PULLBACK (${retrace})`;
+      } else if (d.phase === 'PHASE_1_INDICATION') {
+        statusClass = 'status-pullback';
+        statusLabel = `⚡ IMPULSE (+${d.indication ? d.indication.range : ''} pts)`;
+      }
+    }
+
+    html += `
+      <div class="quick-status-pill ${statusClass}" onclick="scrollToCard('${modelType}-card-${sym}')" title="Click to jump to ${sym} ${modelType.toUpperCase()} card">
+        <span class="pill-sym">${sym}</span>
+        <span class="pill-model-tag ${modelType}">${modelType.toUpperCase()}</span>
+        <span class="pill-status-tag">${statusLabel}</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">${currPrice ? currPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : '--'}</span>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+window.scrollToCard = function(cardId) {
+  const el = document.getElementById(cardId);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('card-pulse-highlight');
+    void el.offsetWidth; // Trigger DOM reflow to restart animation
+    el.classList.add('card-pulse-highlight');
+  }
+};
+
 function renderScannerGrid(scanResults) {
+  renderQuickStatusBar('ictQuickStatusBar', scanResults, 'ict');
+
   const grid = document.getElementById('scannerGrid');
   if (!grid) return;
 
@@ -322,7 +492,7 @@ function renderScannerGrid(scanResults) {
   const availableSymbols = Object.keys(scanResults).length > 0 ? Object.keys(scanResults) : defaultSymbols;
   const gradeWeights = { 'A+': 4, 'A': 3, 'B': 2, 'F': 1 };
 
-  // Sort symbols: Active trades come first, then highest grade, then highest confluence score
+  // Sort symbols: Active trades come FIRST to the front of the line
   const sortedSymbols = [...availableSymbols].sort((a, b) => {
     const dataA = scanResults[a] || {};
     const dataB = scanResults[b] || {};
@@ -330,7 +500,7 @@ function renderScannerGrid(scanResults) {
     const activeA = dataA.is_active_trade ? 1 : 0;
     const activeB = dataB.is_active_trade ? 1 : 0;
     if (activeA !== activeB) {
-      return activeB - activeA; // Move active trades to the top
+      return activeB - activeA; // Move active trades to the very front
     }
 
     const gradeA = gradeWeights[dataA.setup_grade] || 0;
@@ -454,7 +624,14 @@ function renderScannerGrid(scanResults) {
     }
 
     html += `
-      <div class="scanner-card" style="${cardStyle}">
+      <div class="scanner-card" id="ict-card-${sym}" style="${cardStyle}">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span class="model-header-tag ict">⚡ ICT 2022 FVG MODEL</span>
+          <span style="font-size: 11px; font-weight: 700; color: ${isActiveTrade ? '#34d399' : '#94a3b8'};">
+            ${isActiveTrade ? '🚀 ACTIVE TRADE SIGNAL' : '👀 OBSERVING'}
+          </span>
+        </div>
+
         <div class="scanner-card-header">
           <div class="card-title-group">
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -462,7 +639,7 @@ function renderScannerGrid(scanResults) {
               ${gradeBadgeHtml}
               <span ${biasBadge}>${isActiveTrade ? d.direction : 'NEUTRAL / OBSERVING'}</span>
             </div>
-            <span>${d.timeframe} Order Flow | Current: <strong>${d.current_price}</strong></span>
+            <span>${d.timeframe || '5m'} Order Flow | Current: <strong>${(currPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></span>
           </div>
           <div class="confluence-badge-box">
             <div class="confluence-meter ${scoreClass}">
@@ -574,6 +751,8 @@ async function fetchIccScan() {
 }
 
 function renderIccScannerGrid(scanResults) {
+  renderQuickStatusBar('iccQuickStatusBar', scanResults, 'icc');
+
   const grid = document.getElementById('iccScannerGrid');
   if (!grid) return;
 
@@ -686,7 +865,14 @@ function renderIccScannerGrid(scanResults) {
     }
 
     html += `
-      <div class="scanner-card" style="${cardStyle}">
+      <div class="scanner-card" id="icc-card-${sym}" style="${cardStyle}">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span class="model-header-tag icc">🔬 ICC CONTINUATION MODEL</span>
+          <span style="font-size: 11px; font-weight: 700; color: ${isActiveTrade ? '#34d399' : '#94a3b8'};">
+            ${isActiveTrade ? '🚀 ACTIVE CONTINUATION SIGNAL' : '👀 OBSERVING'}
+          </span>
+        </div>
+
         <div class="scanner-card-header">
           <div class="card-title-group">
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
