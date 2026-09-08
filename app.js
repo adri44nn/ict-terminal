@@ -1010,7 +1010,7 @@ function renderIccScannerGrid(scanResults) {
             <div class="plan-val entry" title="Calculated Entry Price">${plan.entry !== null && plan.entry !== undefined ? plan.entry : (ind.equilibrium_50 || '--')}</div>
           </div>
           <div class="plan-cell">
-            <div class="plan-label">Protected SL</div>
+            <div class="plan-label">Protected SL (15M Swing)</div>
             <div class="plan-val sl">${plan.stop_loss !== null && plan.stop_loss !== undefined ? plan.stop_loss : (ind.origin_price || '--')}</div>
           </div>
           <div class="plan-cell">

@@ -658,7 +658,8 @@
       return indications;
     },
 
-    evaluateIccLifecycle: function(candles, indications) {
+    evaluateIccLifecycle: function(candles, indications, options) {
+      options = options || {};
       const n = candles.length;
       if (!indications || indications.length === 0 || n < 10) {
         return {
@@ -684,18 +685,21 @@
       const totalRange = Math.max(latestInd.range, 4.0);
       const isBull = latestInd.direction === 'BULLISH';
 
-      // Targets with realistic macro spacing
-      const tp1 = extreme;
-      const tp2 = isBull ? Math.round((extreme + (totalRange * 0.618)) * 100) / 100 : Math.round((extreme - (totalRange * 0.618)) * 100) / 100;
-      const tp3 = isBull ? Math.round((extreme + (totalRange * 1.272)) * 100) / 100 : Math.round((extreme - (totalRange * 1.272)) * 100) / 100;
       const entry50 = latestInd.equilibrium_50;
       
-      // Authentic Trades by Sci Structural SL (placed below 61.8%-70.5% OTE zone, guaranteeing 2:1+ RR to Indication Peak)
-      const oteSlBull = Math.round((origin + (totalRange * 0.25)) * 100) / 100;
-      const oteSlBear = Math.round((origin - (totalRange * 0.25)) * 100) / 100;
+      // Authentic Trades by Sci Protected SL (Strictly the most recent 15-Minute Swing Low/High)
+      const oteSlBull = (options.recent15mLow !== undefined && options.recent15mLow !== null) 
+        ? Math.round(options.recent15mLow * 100) / 100 
+        : Math.round((origin + (totalRange * 0.25)) * 100) / 100;
+      const oteSlBear = (options.recent15mHigh !== undefined && options.recent15mHigh !== null) 
+        ? Math.round(options.recent15mHigh * 100) / 100 
+        : Math.round((origin - (totalRange * 0.25)) * 100) / 100;
 
       if (n - 1 <= indEndIdx) {
         const plannedRisk = Math.max(Math.abs(entry50 - (isBull ? oteSlBull : oteSlBear)), 1.0);
+        const tp1 = extreme;
+        const tp2 = isBull ? Math.round((entry50 + (plannedRisk * 2.5)) * 100) / 100 : Math.round((entry50 - (plannedRisk * 2.5)) * 100) / 100;
+        const tp3 = isBull ? Math.round((entry50 + (plannedRisk * 3.5)) * 100) / 100 : Math.round((entry50 - (plannedRisk * 3.5)) * 100) / 100;
         const plannedReward = Math.abs(tp1 - entry50);
         const plannedRr = plannedReward / plannedRisk;
 
@@ -748,11 +752,11 @@
               is_active: false,
               direction: 'NEUTRAL',
               entry: entry50,
-              stop_loss: origin,
-              take_profit: tp1,
-              take_profit_1: tp1,
-              take_profit_2: tp2,
-              take_profit_3: tp3,
+              stop_loss: oteSlBull,
+              take_profit: extreme,
+              take_profit_1: extreme,
+              take_profit_2: Math.round((entry50 + (totalRange * 1.5)) * 100) / 100,
+              take_profit_3: Math.round((entry50 + (totalRange * 2.5)) * 100) / 100,
               rr_ratio: '--'
             }
           };
@@ -773,12 +777,15 @@
         };
 
         const activeEntry = currPrice;
-        // Tight structural SL below swing pullback low
-        const activeSl = Math.round(Math.min(lowestRetrace - (totalRange * 0.04), oteSlBull) * 100) / 100;
+        // Protected 15M Swing Low SL
+        const activeSl = oteSlBull;
         const risk = Math.max(Math.abs(activeEntry - activeSl), 1.0);
+        const tp1 = Math.max(extreme, Math.round((activeEntry + (risk * 2.0)) * 100) / 100);
+        const tp2 = Math.round((activeEntry + (risk * 3.0)) * 100) / 100;
+        const tp3 = Math.round((activeEntry + (risk * 4.0)) * 100) / 100;
         const reward = Math.abs(tp1 - activeEntry);
         const rr = reward / risk;
-        const meets2to1 = rr >= 2.0;
+        const meets2to1 = rr >= 1.8;
 
         if (isInHealthyZone && bullishReversalTrigger && meets2to1) {
           const grade = rr >= 2.5 ? (retracePct >= 40.0 && retracePct <= 65.0 ? 'A+' : 'A') : 'A';
@@ -808,7 +815,10 @@
           };
         } else {
           const plannedRisk = Math.max(Math.abs(entry50 - oteSlBull), 1.0);
-          const plannedReward = Math.abs(tp1 - entry50);
+          const pTp1 = Math.max(extreme, Math.round((entry50 + (plannedRisk * 2.0)) * 100) / 100);
+          const pTp2 = Math.round((entry50 + (plannedRisk * 3.0)) * 100) / 100;
+          const pTp3 = Math.round((entry50 + (plannedRisk * 4.0)) * 100) / 100;
+          const plannedReward = Math.abs(pTp1 - entry50);
           const plannedRr = plannedReward / plannedRisk;
 
           return {
@@ -817,7 +827,7 @@
             is_active_trade: false,
             direction: 'BULLISH',
             setup_grade: 'B',
-            grade_desc: `Phase 2: Retracing into Golden Zone (50% Eq: ${entry50}) - Target Peak TP1: ${tp1} (1:${plannedRr.toFixed(1)} RR)`,
+            grade_desc: `Phase 2: Retracing into Golden Zone (50% Eq: ${entry50}) - Target Peak TP1: ${pTp1} (1:${plannedRr.toFixed(1)} RR)`,
             confluence_score: isInHealthyZone ? 70 : 45,
             indication: latestInd,
             correction: correctionInfo,
@@ -827,10 +837,10 @@
               action: 'PULLBACK IN PROGRESS',
               entry: entry50,
               stop_loss: oteSlBull,
-              take_profit: tp1,
-              take_profit_1: tp1,
-              take_profit_2: tp2,
-              take_profit_3: tp3,
+              take_profit: pTp1,
+              take_profit_1: pTp1,
+              take_profit_2: pTp2,
+              take_profit_3: pTp3,
               risk_points: Math.round(plannedRisk * 100) / 100,
               reward_points: Math.round(plannedReward * 100) / 100,
               rr_ratio: `1:${plannedRr.toFixed(2)}`
@@ -858,11 +868,11 @@
               is_active: false,
               direction: 'NEUTRAL',
               entry: entry50,
-              stop_loss: origin,
-              take_profit: tp1,
-              take_profit_1: tp1,
-              take_profit_2: tp2,
-              take_profit_3: tp3,
+              stop_loss: oteSlBear,
+              take_profit: extreme,
+              take_profit_1: extreme,
+              take_profit_2: Math.round((entry50 - (totalRange * 1.5)) * 100) / 100,
+              take_profit_3: Math.round((entry50 - (totalRange * 2.5)) * 100) / 100,
               rr_ratio: '--'
             }
           };
@@ -883,12 +893,15 @@
         };
 
         const activeEntry = currPrice;
-        // Tight structural SL above swing pullback high
-        const activeSl = Math.round(Math.max(highestRetrace + (totalRange * 0.04), oteSlBear) * 100) / 100;
+        // Protected 15M Swing High SL
+        const activeSl = oteSlBear;
         const risk = Math.max(Math.abs(activeSl - activeEntry), 1.0);
+        const tp1 = Math.min(extreme, Math.round((activeEntry - (risk * 2.0)) * 100) / 100);
+        const tp2 = Math.round((activeEntry - (risk * 3.0)) * 100) / 100;
+        const tp3 = Math.round((activeEntry - (risk * 4.0)) * 100) / 100;
         const reward = Math.abs(activeEntry - tp1);
         const rr = reward / risk;
-        const meets2to1 = rr >= 2.0;
+        const meets2to1 = rr >= 1.8;
 
         if (isInHealthyZone && bearishReversalTrigger && meets2to1) {
           const grade = rr >= 2.5 ? (retracePct >= 40.0 && retracePct <= 65.0 ? 'A+' : 'A') : 'A';
@@ -918,7 +931,10 @@
           };
         } else {
           const plannedRisk = Math.max(Math.abs(oteSlBear - entry50), 1.0);
-          const plannedReward = Math.abs(entry50 - tp1);
+          const pTp1 = Math.min(extreme, Math.round((entry50 - (plannedRisk * 2.0)) * 100) / 100);
+          const pTp2 = Math.round((entry50 - (plannedRisk * 3.0)) * 100) / 100;
+          const pTp3 = Math.round((entry50 - (plannedRisk * 4.0)) * 100) / 100;
+          const plannedReward = Math.abs(entry50 - pTp1);
           const plannedRr = plannedReward / plannedRisk;
 
           return {
@@ -927,7 +943,7 @@
             is_active_trade: false,
             direction: 'BEARISH',
             setup_grade: 'B',
-            grade_desc: `Phase 2: Retracing into Golden Zone (50% Eq: ${entry50}) - Target Low TP1: ${tp1} (1:${plannedRr.toFixed(1)} RR)`,
+            grade_desc: `Phase 2: Retracing into Golden Zone (50% Eq: ${entry50}) - Target Low TP1: ${pTp1} (1:${plannedRr.toFixed(1)} RR)`,
             confluence_score: isInHealthyZone ? 70 : 45,
             indication: latestInd,
             correction: correctionInfo,
@@ -937,10 +953,10 @@
               action: 'PULLBACK IN PROGRESS',
               entry: entry50,
               stop_loss: oteSlBear,
-              take_profit: tp1,
-              take_profit_1: tp1,
-              take_profit_2: tp2,
-              take_profit_3: tp3,
+              take_profit: pTp1,
+              take_profit_1: pTp1,
+              take_profit_2: pTp2,
+              take_profit_3: pTp3,
               risk_points: Math.round(plannedRisk * 100) / 100,
               reward_points: Math.round(plannedReward * 100) / 100,
               rr_ratio: `1:${plannedRr.toFixed(2)}`
@@ -1008,20 +1024,40 @@
       const tf30Candles = this.aggregateCandles(candles, 6);
       const tf60Candles = this.aggregateCandles(candles, 12);
 
+      // Extract 15-Minute Swings for Protected Swing Low / Swing High SL
+      const tf15Swings = this.findSwings(tf15Candles, 1);
+      let recent15mLow = null;
+      if (tf15Swings.swingLows && tf15Swings.swingLows.length > 0) {
+        recent15mLow = tf15Swings.swingLows[tf15Swings.swingLows.length - 1].price;
+      } else if (tf15Candles.length > 0) {
+        recent15mLow = Math.min(...tf15Candles.slice(-10).map(c => c.low));
+      } else {
+        recent15mLow = Math.min(...candles.slice(-30).map(c => c.low));
+      }
+
+      let recent15mHigh = null;
+      if (tf15Swings.swingHighs && tf15Swings.swingHighs.length > 0) {
+        recent15mHigh = tf15Swings.swingHighs[tf15Swings.swingHighs.length - 1].price;
+      } else if (tf15Candles.length > 0) {
+        recent15mHigh = Math.max(...tf15Candles.slice(-10).map(c => c.high));
+      } else {
+        recent15mHigh = Math.max(...candles.slice(-30).map(c => c.high));
+      }
+
       // 2. Extract 1-HOUR (HTF) INDICATION & MACRO TARGETS (Trades by Sci Core Architecture)
       const htfSwings = this.findSwings(tf60Candles.length >= 4 ? tf60Candles : tf30Candles, 1);
       const htfIndications = this.detectIndications(tf60Candles.length >= 4 ? tf60Candles : tf30Candles, htfSwings.swingHighs, htfSwings.swingLows);
       const latestHtfInd = htfIndications.length > 0 ? htfIndications[htfIndications.length - 1] : null;
 
-      // 3. Extract 5-MINUTE (LTF) INDICATION & EXECUTION
+      // 3. Extract 5-MINUTE (LTF) INDICATION & EXECUTION with 15M Swing SL
       const ltfSwings = this.findSwings(candles, 2);
       const ltfIndications = this.detectIndications(candles, ltfSwings.swingHighs, ltfSwings.swingLows);
-      const ltfState = this.evaluateIccLifecycle(candles, ltfIndications);
+      const ltfState = this.evaluateIccLifecycle(candles, ltfIndications, { recent15mLow, recent15mHigh });
 
       // 4. Multi-Timeframe Trend State Calculation
-      const tf15State = tf15Candles.length >= 5 ? this.evaluateIccLifecycle(tf15Candles, this.detectIndications(tf15Candles, this.findSwings(tf15Candles, 2).swingHighs, this.findSwings(tf15Candles, 2).swingLows)) : null;
-      const tf30State = tf30Candles.length >= 4 ? this.evaluateIccLifecycle(tf30Candles, this.detectIndications(tf30Candles, this.findSwings(tf30Candles, 2).swingHighs, this.findSwings(tf30Candles, 2).swingLows)) : null;
-      const tf60State = tf60Candles.length >= 3 ? this.evaluateIccLifecycle(tf60Candles, this.detectIndications(tf60Candles, this.findSwings(tf60Candles, 1).swingHighs, this.findSwings(tf60Candles, 1).swingLows)) : null;
+      const tf15State = tf15Candles.length >= 5 ? this.evaluateIccLifecycle(tf15Candles, this.detectIndications(tf15Candles, this.findSwings(tf15Candles, 2).swingHighs, this.findSwings(tf15Candles, 2).swingLows), { recent15mLow, recent15mHigh }) : null;
+      const tf30State = tf30Candles.length >= 4 ? this.evaluateIccLifecycle(tf30Candles, this.detectIndications(tf30Candles, this.findSwings(tf30Candles, 2).swingHighs, this.findSwings(tf30Candles, 2).swingLows), { recent15mLow, recent15mHigh }) : null;
+      const tf60State = tf60Candles.length >= 3 ? this.evaluateIccLifecycle(tf60Candles, this.detectIndications(tf60Candles, this.findSwings(tf60Candles, 1).swingHighs, this.findSwings(tf60Candles, 1).swingLows), { recent15mLow, recent15mHigh }) : null;
 
       function getTfSummary(state, fallbackCandles) {
         if (state && state.direction && state.direction !== 'NEUTRAL') {
