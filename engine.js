@@ -687,88 +687,32 @@
 
       const entry50 = latestInd.equilibrium_50;
       
-      // Authentic Trades by Sci Protected SL (Strictly the most recent 15-Minute Swing Low/High)
-      const oteSlBull = (options.recent15mLow !== undefined && options.recent15mLow !== null) 
-        ? Math.round(options.recent15mLow * 100) / 100 
-        : Math.round((origin + (totalRange * 0.25)) * 100) / 100;
-      const oteSlBear = (options.recent15mHigh !== undefined && options.recent15mHigh !== null) 
-        ? Math.round(options.recent15mHigh * 100) / 100 
-        : Math.round((origin - (totalRange * 0.25)) * 100) / 100;
+      // Authentic Trades by Sci Protected SL (Strictly 15-Minute Swing Low/High)
+      let sl = isBull
+        ? ((options.recent15mLow && options.recent15mLow < currPrice) ? Math.round(options.recent15mLow * 100) / 100 : Math.round(origin * 100) / 100)
+        : ((options.recent15mHigh && options.recent15mHigh > currPrice) ? Math.round(options.recent15mHigh * 100) / 100 : Math.round(origin * 100) / 100);
 
-      if (n - 1 <= indEndIdx) {
-        const plannedRisk = Math.max(Math.abs(entry50 - (isBull ? oteSlBull : oteSlBear)), 1.0);
-        const tp1 = extreme;
-        const tp2 = isBull ? Math.round((entry50 + (plannedRisk * 2.5)) * 100) / 100 : Math.round((entry50 - (plannedRisk * 2.5)) * 100) / 100;
-        const tp3 = isBull ? Math.round((entry50 + (plannedRisk * 3.5)) * 100) / 100 : Math.round((entry50 - (plannedRisk * 3.5)) * 100) / 100;
-        const plannedReward = Math.abs(tp1 - entry50);
-        const plannedRr = plannedReward / plannedRisk;
-
-        return {
-          phase: 'PHASE_1_INDICATION',
-          phase_title: `⚡ Phase 1: Strong ${latestInd.direction} Indication Active (+${totalRange} pts)`,
-          is_active_trade: false,
-          direction: latestInd.direction,
-          setup_grade: 'B',
-          grade_desc: `Phase 1: Impulse Breakout Active (Awaiting Controlled Pullback to ${entry50})`,
-          confluence_score: 55,
-          indication: latestInd,
-          correction: null,
-          trade_plan: {
-            is_active: false,
-            direction: latestInd.direction,
-            action: 'OBSERVING / IMPULSE EXPANSION',
-            entry: entry50,
-            stop_loss: isBull ? oteSlBull : oteSlBear,
-            take_profit: tp1,
-            take_profit_1: tp1,
-            take_profit_2: tp2,
-            take_profit_3: tp3,
-            risk_points: Math.round(plannedRisk * 100) / 100,
-            reward_points: Math.round(plannedReward * 100) / 100,
-            rr_ratio: `1:${plannedRr.toFixed(2)}`
-          }
-        };
+      // Directional Sanity enforcement
+      if (isBull && sl >= currPrice) {
+        sl = Math.min(origin, currPrice - (totalRange * 0.4));
+      } else if (!isBull && sl <= currPrice) {
+        sl = Math.max(origin, currPrice + (totalRange * 0.4));
       }
 
       const postCandles = candles.slice(indEndIdx);
 
       if (isBull) {
-        const lowestRetrace = Math.min(...postCandles.map(c => c.low));
-        const retraceAmount = extreme - lowestRetrace;
+        const lowestRetrace = postCandles.length > 0 ? Math.min(...postCandles.map(c => c.low)) : currPrice;
+        const retraceAmount = Math.max(extreme - lowestRetrace, 0);
         const retracePct = Math.round((retraceAmount / totalRange) * 1000) / 10;
 
-        if (lowestRetrace <= origin) {
-          return {
-            phase: 'STANDBY',
-            phase_title: 'Indication Blown (Origin Breached) - Resetting',
-            is_active_trade: false,
-            direction: 'NEUTRAL',
-            setup_grade: 'F',
-            grade_desc: 'Indication Invalidated (Pullback breached 100% of origin)',
-            confluence_score: 0,
-            indication: latestInd,
-            correction: null,
-            trade_plan: {
-              is_active: false,
-              direction: 'NEUTRAL',
-              entry: entry50,
-              stop_loss: oteSlBull,
-              take_profit: extreme,
-              take_profit_1: extreme,
-              take_profit_2: Math.round((entry50 + (totalRange * 1.5)) * 100) / 100,
-              take_profit_3: Math.round((entry50 + (totalRange * 2.5)) * 100) / 100,
-              rr_ratio: '--'
-            }
-          };
-        }
-
-        const isInHealthyZone = retracePct >= 28.0 && retracePct <= 75.0;
+        const isInHealthyZone = retracePct >= 20.0 && retracePct <= 75.0;
         const lastC = candles[n - 1];
         const prevC = n >= 2 ? candles[n - 2] : lastC;
-        const bullishReversalTrigger = lastC.close > lastC.open && (lastC.close > prevC.high || currPrice >= entry50);
+        const bullishReversalTrigger = (lastC.close > lastC.open && (lastC.close > prevC.high || currPrice >= entry50)) || (currPrice >= extreme);
 
         const correctionInfo = {
-          status: isInHealthyZone ? 'HEALTHY GOLDEN ZONE' : 'SHALLOW/DEEP',
+          status: isInHealthyZone ? 'HEALTHY GOLDEN ZONE' : (retracePct < 20.0 ? 'SHALLOW / EXPANSION' : 'DEEP PULLBACK'),
           lowest_price: lowestRetrace,
           retrace_pct: retracePct,
           zone_bottom: latestInd.retrace_618,
@@ -777,49 +721,46 @@
         };
 
         const activeEntry = currPrice;
-        // Protected 15M Swing Low SL
-        const activeSl = oteSlBull;
-        const risk = Math.max(Math.abs(activeEntry - activeSl), 1.0);
-        const tp1 = Math.max(extreme, Math.round((activeEntry + (risk * 2.0)) * 100) / 100);
-        const tp2 = Math.round((activeEntry + (risk * 3.0)) * 100) / 100;
-        const tp3 = Math.round((activeEntry + (risk * 4.0)) * 100) / 100;
-        const reward = Math.abs(tp1 - activeEntry);
-        const rr = reward / risk;
-        const meets2to1 = rr >= 1.8;
+        const risk = Math.max(activeEntry - sl, 2.0);
+        const tp1 = Math.max(extreme, Math.round((activeEntry + (risk * 1.5)) * 100) / 100);
+        const tp2 = Math.round((activeEntry + (risk * 2.5)) * 100) / 100;
+        const tp3 = Math.round((activeEntry + (risk * 3.5)) * 100) / 100;
+        const rr = (Math.abs(tp1 - activeEntry) / risk);
 
-        if (isInHealthyZone && bullishReversalTrigger && meets2to1) {
-          const grade = rr >= 2.5 ? (retracePct >= 40.0 && retracePct <= 65.0 ? 'A+' : 'A') : 'A';
+        if ((isInHealthyZone && bullishReversalTrigger) || currPrice >= extreme) {
+          const grade = rr >= 2.0 ? 'A+' : 'A';
           return {
             phase: 'PHASE_3_CONTINUATION',
             phase_title: `🚀 PHASE 3: BULLISH CONTINUATION ARMED (1:${rr.toFixed(1)} RR)`,
             is_active_trade: true,
             direction: 'BULLISH',
             setup_grade: grade,
-            grade_desc: `ICC Grade ${grade}: Reversal Triggered out of ${retracePct}% Golden Zone. 1:${rr.toFixed(1)} RR to Peak TP1 (${tp1})`,
+            grade_desc: `ICC Grade ${grade}: 15M Swing Low Protected at ${sl}. Target TP: ${tp2} (1:${rr.toFixed(1)} RR)`,
             confluence_score: grade === 'A+' ? 100 : 88,
             indication: latestInd,
             correction: correctionInfo,
             trade_plan: {
               is_active: true,
               direction: 'BULLISH',
+              action: 'BUY LIMIT / CONTINUATION TRIGGER',
               entry: Math.round(activeEntry * 100) / 100,
-              stop_loss: activeSl,
-              take_profit: tp1,
+              stop_loss: sl,
+              take_profit: tp2,
               take_profit_1: tp1,
               take_profit_2: tp2,
               take_profit_3: tp3,
               risk_points: Math.round(risk * 100) / 100,
-              reward_points: Math.round(reward * 100) / 100,
+              reward_points: Math.round((tp2 - activeEntry) * 100) / 100,
               rr_ratio: `1:${rr.toFixed(2)}`
             }
           };
         } else {
-          const plannedRisk = Math.max(Math.abs(entry50 - oteSlBull), 1.0);
-          const pTp1 = Math.max(extreme, Math.round((entry50 + (plannedRisk * 2.0)) * 100) / 100);
-          const pTp2 = Math.round((entry50 + (plannedRisk * 3.0)) * 100) / 100;
-          const pTp3 = Math.round((entry50 + (plannedRisk * 4.0)) * 100) / 100;
-          const plannedReward = Math.abs(pTp1 - entry50);
-          const plannedRr = plannedReward / plannedRisk;
+          const plannedEntry = entry50;
+          const plannedRisk = Math.max(plannedEntry - sl, 2.0);
+          const pTp1 = Math.max(extreme, Math.round((plannedEntry + (plannedRisk * 1.5)) * 100) / 100);
+          const pTp2 = Math.round((plannedEntry + (plannedRisk * 2.5)) * 100) / 100;
+          const pTp3 = Math.round((plannedEntry + (plannedRisk * 3.5)) * 100) / 100;
+          const plannedRr = (pTp2 - plannedEntry) / plannedRisk;
 
           return {
             phase: 'PHASE_2_CORRECTION',
@@ -827,7 +768,7 @@
             is_active_trade: false,
             direction: 'BULLISH',
             setup_grade: 'B',
-            grade_desc: `Phase 2: Retracing into Golden Zone (50% Eq: ${entry50}) - Target Peak TP1: ${pTp1} (1:${plannedRr.toFixed(1)} RR)`,
+            grade_desc: `Phase 2: Retracing into 50% Eq (${plannedEntry}) - 15M Swing SL: ${sl} | Target TP: ${pTp2}`,
             confluence_score: isInHealthyZone ? 70 : 45,
             indication: latestInd,
             correction: correctionInfo,
@@ -835,56 +776,31 @@
               is_active: false,
               direction: 'BULLISH',
               action: 'PULLBACK IN PROGRESS',
-              entry: entry50,
-              stop_loss: oteSlBull,
-              take_profit: pTp1,
+              entry: plannedEntry,
+              stop_loss: sl,
+              take_profit: pTp2,
               take_profit_1: pTp1,
               take_profit_2: pTp2,
               take_profit_3: pTp3,
               risk_points: Math.round(plannedRisk * 100) / 100,
-              reward_points: Math.round(plannedReward * 100) / 100,
+              reward_points: Math.round((pTp2 - plannedEntry) * 100) / 100,
               rr_ratio: `1:${plannedRr.toFixed(2)}`
             }
           };
         }
       } else {
         // BEARISH
-        const highestRetrace = Math.max(...postCandles.map(c => c.high));
-        const retraceAmount = highestRetrace - extreme;
+        const highestRetrace = postCandles.length > 0 ? Math.max(...postCandles.map(c => c.high)) : currPrice;
+        const retraceAmount = Math.max(highestRetrace - extreme, 0);
         const retracePct = Math.round((retraceAmount / totalRange) * 1000) / 10;
 
-        if (highestRetrace >= origin) {
-          return {
-            phase: 'STANDBY',
-            phase_title: 'Indication Blown (Origin Breached) - Resetting',
-            is_active_trade: false,
-            direction: 'NEUTRAL',
-            setup_grade: 'F',
-            grade_desc: 'Indication Invalidated (Pullback breached 100% of origin)',
-            confluence_score: 0,
-            indication: latestInd,
-            correction: null,
-            trade_plan: {
-              is_active: false,
-              direction: 'NEUTRAL',
-              entry: entry50,
-              stop_loss: oteSlBear,
-              take_profit: extreme,
-              take_profit_1: extreme,
-              take_profit_2: Math.round((entry50 - (totalRange * 1.5)) * 100) / 100,
-              take_profit_3: Math.round((entry50 - (totalRange * 2.5)) * 100) / 100,
-              rr_ratio: '--'
-            }
-          };
-        }
-
-        const isInHealthyZone = retracePct >= 28.0 && retracePct <= 75.0;
+        const isInHealthyZone = retracePct >= 20.0 && retracePct <= 75.0;
         const lastC = candles[n - 1];
         const prevC = n >= 2 ? candles[n - 2] : lastC;
-        const bearishReversalTrigger = lastC.close < lastC.open && (lastC.close < prevC.low || currPrice <= entry50);
+        const bearishReversalTrigger = (lastC.close < lastC.open && (lastC.close < prevC.low || currPrice <= entry50)) || (currPrice <= extreme);
 
         const correctionInfo = {
-          status: isInHealthyZone ? 'HEALTHY GOLDEN ZONE' : 'SHALLOW/DEEP',
+          status: isInHealthyZone ? 'HEALTHY GOLDEN ZONE' : (retracePct < 20.0 ? 'SHALLOW / EXPANSION' : 'DEEP PULLBACK'),
           highest_price: highestRetrace,
           retrace_pct: retracePct,
           zone_bottom: latestInd.retrace_382,
@@ -893,49 +809,46 @@
         };
 
         const activeEntry = currPrice;
-        // Protected 15M Swing High SL
-        const activeSl = oteSlBear;
-        const risk = Math.max(Math.abs(activeSl - activeEntry), 1.0);
-        const tp1 = Math.min(extreme, Math.round((activeEntry - (risk * 2.0)) * 100) / 100);
-        const tp2 = Math.round((activeEntry - (risk * 3.0)) * 100) / 100;
-        const tp3 = Math.round((activeEntry - (risk * 4.0)) * 100) / 100;
-        const reward = Math.abs(activeEntry - tp1);
-        const rr = reward / risk;
-        const meets2to1 = rr >= 1.8;
+        const risk = Math.max(sl - activeEntry, 2.0);
+        const tp1 = Math.min(extreme, Math.round((activeEntry - (risk * 1.5)) * 100) / 100);
+        const tp2 = Math.round((activeEntry - (risk * 2.5)) * 100) / 100;
+        const tp3 = Math.round((activeEntry - (risk * 3.5)) * 100) / 100;
+        const rr = (Math.abs(activeEntry - tp1) / risk);
 
-        if (isInHealthyZone && bearishReversalTrigger && meets2to1) {
-          const grade = rr >= 2.5 ? (retracePct >= 40.0 && retracePct <= 65.0 ? 'A+' : 'A') : 'A';
+        if ((isInHealthyZone && bearishReversalTrigger) || currPrice <= extreme) {
+          const grade = rr >= 2.0 ? 'A+' : 'A';
           return {
             phase: 'PHASE_3_CONTINUATION',
             phase_title: `🚀 PHASE 3: BEARISH CONTINUATION ARMED (1:${rr.toFixed(1)} RR)`,
             is_active_trade: true,
             direction: 'BEARISH',
             setup_grade: grade,
-            grade_desc: `ICC Grade ${grade}: Reversal Triggered out of ${retracePct}% Golden Zone. 1:${rr.toFixed(1)} RR to Low TP1 (${tp1})`,
+            grade_desc: `ICC Grade ${grade}: 15M Swing High Protected at ${sl}. Target TP: ${tp2} (1:${rr.toFixed(1)} RR)`,
             confluence_score: grade === 'A+' ? 100 : 88,
             indication: latestInd,
             correction: correctionInfo,
             trade_plan: {
               is_active: true,
               direction: 'BEARISH',
+              action: 'SELL LIMIT / CONTINUATION TRIGGER',
               entry: Math.round(activeEntry * 100) / 100,
-              stop_loss: activeSl,
-              take_profit: tp1,
+              stop_loss: sl,
+              take_profit: tp2,
               take_profit_1: tp1,
               take_profit_2: tp2,
               take_profit_3: tp3,
               risk_points: Math.round(risk * 100) / 100,
-              reward_points: Math.round(reward * 100) / 100,
+              reward_points: Math.round((activeEntry - tp2) * 100) / 100,
               rr_ratio: `1:${rr.toFixed(2)}`
             }
           };
         } else {
-          const plannedRisk = Math.max(Math.abs(oteSlBear - entry50), 1.0);
-          const pTp1 = Math.min(extreme, Math.round((entry50 - (plannedRisk * 2.0)) * 100) / 100);
-          const pTp2 = Math.round((entry50 - (plannedRisk * 3.0)) * 100) / 100;
-          const pTp3 = Math.round((entry50 - (plannedRisk * 4.0)) * 100) / 100;
-          const plannedReward = Math.abs(entry50 - pTp1);
-          const plannedRr = plannedReward / plannedRisk;
+          const plannedEntry = entry50;
+          const plannedRisk = Math.max(sl - plannedEntry, 2.0);
+          const pTp1 = Math.min(extreme, Math.round((plannedEntry - (plannedRisk * 1.5)) * 100) / 100);
+          const pTp2 = Math.round((plannedEntry - (plannedRisk * 2.5)) * 100) / 100;
+          const pTp3 = Math.round((plannedEntry - (plannedRisk * 3.5)) * 100) / 100;
+          const plannedRr = (plannedEntry - pTp2) / plannedRisk;
 
           return {
             phase: 'PHASE_2_CORRECTION',
@@ -943,7 +856,7 @@
             is_active_trade: false,
             direction: 'BEARISH',
             setup_grade: 'B',
-            grade_desc: `Phase 2: Retracing into Golden Zone (50% Eq: ${entry50}) - Target Low TP1: ${pTp1} (1:${plannedRr.toFixed(1)} RR)`,
+            grade_desc: `Phase 2: Retracing into 50% Eq (${plannedEntry}) - 15M Swing SL: ${sl} | Target TP: ${pTp2}`,
             confluence_score: isInHealthyZone ? 70 : 45,
             indication: latestInd,
             correction: correctionInfo,
@@ -951,14 +864,14 @@
               is_active: false,
               direction: 'BEARISH',
               action: 'PULLBACK IN PROGRESS',
-              entry: entry50,
-              stop_loss: oteSlBear,
-              take_profit: pTp1,
+              entry: plannedEntry,
+              stop_loss: sl,
+              take_profit: pTp2,
               take_profit_1: pTp1,
               take_profit_2: pTp2,
               take_profit_3: pTp3,
               risk_points: Math.round(plannedRisk * 100) / 100,
-              reward_points: Math.round(plannedReward * 100) / 100,
+              reward_points: Math.round((plannedEntry - pTp2) * 100) / 100,
               rr_ratio: `1:${plannedRr.toFixed(2)}`
             }
           };
@@ -1024,35 +937,79 @@
       const tf30Candles = this.aggregateCandles(candles, 6);
       const tf60Candles = this.aggregateCandles(candles, 12);
 
-      // Extract 15-Minute Swings for Protected Swing Low / Swing High SL
+      // Determine 1-Hour HTF Trend Direction FIRST
+      const htfCandles = tf60Candles.length >= 3 ? tf60Candles : (tf30Candles.length >= 3 ? tf30Candles : candles);
+      const htfBull = htfCandles[htfCandles.length - 1].close >= htfCandles[0].open;
+      const htfTrend = htfBull ? 'BULLISH' : 'BEARISH';
+      const isBull = htfTrend === 'BULLISH';
+
+      // 2. Extract 15-Minute Swings for Protected SL
       const tf15Swings = this.findSwings(tf15Candles, 1);
       let recent15mLow = null;
       if (tf15Swings.swingLows && tf15Swings.swingLows.length > 0) {
-        recent15mLow = tf15Swings.swingLows[tf15Swings.swingLows.length - 1].price;
-      } else if (tf15Candles.length > 0) {
-        recent15mLow = Math.min(...tf15Candles.slice(-10).map(c => c.low));
-      } else {
-        recent15mLow = Math.min(...candles.slice(-30).map(c => c.low));
+        const validLows = tf15Swings.swingLows.filter(s => s.price < currentPrice);
+        recent15mLow = validLows.length > 0 ? validLows[validLows.length - 1].price : tf15Swings.swingLows[tf15Swings.swingLows.length - 1].price;
+      }
+      if (!recent15mLow || recent15mLow >= currentPrice) {
+        recent15mLow = Math.min(...candles.slice(-40).map(c => c.low));
       }
 
       let recent15mHigh = null;
       if (tf15Swings.swingHighs && tf15Swings.swingHighs.length > 0) {
-        recent15mHigh = tf15Swings.swingHighs[tf15Swings.swingHighs.length - 1].price;
-      } else if (tf15Candles.length > 0) {
-        recent15mHigh = Math.max(...tf15Candles.slice(-10).map(c => c.high));
-      } else {
-        recent15mHigh = Math.max(...candles.slice(-30).map(c => c.high));
+        const validHighs = tf15Swings.swingHighs.filter(s => s.price > currentPrice);
+        recent15mHigh = validHighs.length > 0 ? validHighs[validHighs.length - 1].price : tf15Swings.swingHighs[tf15Swings.swingHighs.length - 1].price;
+      }
+      if (!recent15mHigh || recent15mHigh <= currentPrice) {
+        recent15mHigh = Math.max(...candles.slice(-40).map(c => c.high));
       }
 
-      // 2. Extract 1-HOUR (HTF) INDICATION & MACRO TARGETS (Trades by Sci Core Architecture)
-      const htfSwings = this.findSwings(tf60Candles.length >= 4 ? tf60Candles : tf30Candles, 1);
-      const htfIndications = this.detectIndications(tf60Candles.length >= 4 ? tf60Candles : tf30Candles, htfSwings.swingHighs, htfSwings.swingLows);
-      const latestHtfInd = htfIndications.length > 0 ? htfIndications[htfIndications.length - 1] : null;
-
-      // 3. Extract 5-MINUTE (LTF) INDICATION & EXECUTION with 15M Swing SL
+      // 3. Extract Indications and FILTER STRICTLY TO HTF TREND BIAS
       const ltfSwings = this.findSwings(candles, 2);
-      const ltfIndications = this.detectIndications(candles, ltfSwings.swingHighs, ltfSwings.swingLows);
-      const ltfState = this.evaluateIccLifecycle(candles, ltfIndications, { recent15mLow, recent15mHigh });
+      const rawIndications = this.detectIndications(candles, ltfSwings.swingHighs, ltfSwings.swingLows);
+      let alignedIndications = rawIndications.filter(ind => ind.direction === htfTrend);
+
+      if (alignedIndications.length === 0) {
+        const minL = Math.min(...candles.map(c => c.low));
+        const maxH = Math.max(...candles.map(c => c.high));
+        const rng = maxH - minL;
+        if (isBull) {
+          const orig = (recent15mLow && recent15mLow < maxH) ? recent15mLow : minL;
+          const totR = maxH - orig;
+          alignedIndications.push({
+            type: 'BULLISH_INDICATION',
+            direction: 'BULLISH',
+            start_index: 0,
+            end_index: Math.max(1, candles.length - 8),
+            origin_price: Math.round(orig * 100) / 100,
+            extreme_price: Math.round(maxH * 100) / 100,
+            range: Math.round(totR * 100) / 100,
+            start_time: candles[0].time,
+            end_time: candles[candles.length - 1].time,
+            equilibrium_50: Math.round((orig + (totR * 0.5)) * 100) / 100,
+            retrace_382: Math.round((maxH - (totR * 0.382)) * 100) / 100,
+            retrace_618: Math.round((maxH - (totR * 0.618)) * 100) / 100
+          });
+        } else {
+          const orig = (recent15mHigh && recent15mHigh > minL) ? recent15mHigh : maxH;
+          const totR = orig - minL;
+          alignedIndications.push({
+            type: 'BEARISH_INDICATION',
+            direction: 'BEARISH',
+            start_index: 0,
+            end_index: Math.max(1, candles.length - 8),
+            origin_price: Math.round(orig * 100) / 100,
+            extreme_price: Math.round(minL * 100) / 100,
+            range: Math.round(totR * 100) / 100,
+            start_time: candles[0].time,
+            end_time: candles[candles.length - 1].time,
+            equilibrium_50: Math.round((orig - (totR * 0.5)) * 100) / 100,
+            retrace_382: Math.round((minL + (totR * 0.382)) * 100) / 100,
+            retrace_618: Math.round((minL + (totR * 0.618)) * 100) / 100
+          });
+        }
+      }
+
+      const ltfState = this.evaluateIccLifecycle(candles, alignedIndications, { recent15mLow, recent15mHigh });
 
       // 4. Multi-Timeframe Trend State Calculation
       const tf15State = tf15Candles.length >= 5 ? this.evaluateIccLifecycle(tf15Candles, this.detectIndications(tf15Candles, this.findSwings(tf15Candles, 2).swingHighs, this.findSwings(tf15Candles, 2).swingLows), { recent15mLow, recent15mHigh }) : null;
@@ -1070,11 +1027,11 @@
           };
         }
         if (fallbackCandles && fallbackCandles.length >= 2) {
-          const isBull = fallbackCandles[fallbackCandles.length - 1].close >= fallbackCandles[0].open;
+          const isB = fallbackCandles[fallbackCandles.length - 1].close >= fallbackCandles[0].open;
           return {
-            direction: isBull ? 'BULLISH' : 'BEARISH',
-            phase: isBull ? 'UPTREND' : 'DOWNTREND',
-            phase_short: isBull ? 'BULL TREND' : 'BEAR TREND',
+            direction: isB ? 'BULLISH' : 'BEARISH',
+            phase: isB ? 'UPTREND' : 'DOWNTREND',
+            phase_short: isB ? 'BULL TREND' : 'BEAR TREND',
             grade: 'B',
             retrace_pct: null
           };
@@ -1115,10 +1072,8 @@
         tfBadgeClass = 'mixed';
       }
 
-      // 5. TOP-DOWN ICC SYNTHESIS: 1-Hour Trend Bias Dictates Primary Direction
-      const htfTrend = (multiTfTrends['1h'] && multiTfTrends['1h'].direction !== 'NEUTRAL') ? multiTfTrends['1h'].direction : ((multiTfTrends['30m'] && multiTfTrends['30m'].direction !== 'NEUTRAL') ? multiTfTrends['30m'].direction : (currentPrice >= firstPrice ? 'BULLISH' : 'BEARISH'));
-      const isLtfAligned = (ltfState.direction === htfTrend);
-
+      // 5. TOP-DOWN ICC SYNTHESIS
+      const isLtfArmed = ltfState.is_active_trade && ltfState.trade_plan;
       let finalPhase = ltfState.phase;
       let finalPhaseTitle = ltfState.phase_title;
       let isActiveTrade = false;
@@ -1126,20 +1081,18 @@
       let finalGradeDesc = ltfState.grade_desc || '';
       let finalTradePlan = ltfState.trade_plan;
 
-      if (isLtfAligned && ltfState.is_active_trade && ltfState.trade_plan) {
-        // 1H and 5M are FULLY ALIGNED in the same direction and 5M Continuation Trigger is armed!
+      if (isLtfArmed) {
         isActiveTrade = true;
         finalPhase = 'PHASE_3_CONTINUATION';
         finalPhaseTitle = `🚀 PHASE 3: ${htfTrend} CONTINUATION ARMED (${ltfState.trade_plan.rr_ratio} RR)`;
         finalGrade = (bullCount >= 3 || bearCount >= 3) ? 'A+' : 'A';
         finalGradeDesc = `Aligned 1H ${htfTrend} Trend + 5M Confirmation Trigger (1:${ltfState.trade_plan.rr_ratio} RR)`;
       } else {
-        // 5M is in pullback or waiting to align with 1H Macro Bias
         isActiveTrade = false;
         finalPhase = 'PHASE_2_CORRECTION';
         finalPhaseTitle = `⏳ Phase 2: Pullback in Progress (Waiting for 5M to align with 1H ${htfTrend} Bias)`;
         finalGrade = 'B';
-        finalGradeDesc = `1H Macro Bias is ${htfTrend}. Waiting for 5M discount pullback & continuation trigger.`;
+        finalGradeDesc = `1H Macro Bias is ${htfTrend}. Retracing towards discount 50% Eq level.`;
       }
 
       return {

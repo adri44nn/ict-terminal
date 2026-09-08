@@ -82,18 +82,18 @@ def fetch_candles(ticker: str, interval: str = "5m", range_str: str = "1d"):
 
 
 def get_symbol_candles(sym_key: str, interval: str = "5m"):
-    """Fetches with primary symbol and falls back to mini contract or 5d weekend range if needed."""
+    """Fetches with primary symbol and falls back to mini contract or 5d range for full multi-TF analysis."""
     cfg = SYMBOLS.get(sym_key)
     if not cfg:
         return []
     
-    candles = fetch_candles(cfg['yahoo'], interval=interval, range_str="1d")
+    candles = fetch_candles(cfg['yahoo'], interval=interval, range_str="5d")
+    if not candles or len(candles) < 30:
+        candles = fetch_candles(cfg['alt'], interval=interval, range_str="5d")
+    if not candles:
+        candles = fetch_candles(cfg['yahoo'], interval=interval, range_str="1d")
     if not candles:
         candles = fetch_candles(cfg['alt'], interval=interval, range_str="1d")
-    if not candles:
-        candles = fetch_candles(cfg['yahoo'], interval=interval, range_str="5d")
-    if not candles:
-        candles = fetch_candles(cfg['alt'], interval=interval, range_str="5d")
     return candles
 
 

@@ -140,83 +140,31 @@ class ICCEngine:
         entry_50 = latest_ind['equilibrium_50']
 
         # Authentic Trades by Sci Protected SL (Strictly 15-Minute Swing Low/High)
-        ote_sl_bull = round(recent_15m_low, 2) if recent_15m_low is not None else round(origin + (total_range * 0.25), 2)
-        ote_sl_bear = round(recent_15m_high, 2) if recent_15m_high is not None else round(origin - (total_range * 0.25), 2)
-
-        if n - 1 <= ind_end_idx:
-            sl = ote_sl_bull if is_bull else ote_sl_bear
-            entry = entry_50
-            risk = max(abs(entry - sl), 1.0)
-            tp1 = extreme
-            tp2 = round(entry + (risk * 2.5), 2) if is_bull else round(entry - (risk * 2.5), 2)
-            tp3 = round(entry + (risk * 3.5), 2) if is_bull else round(entry - (risk * 3.5), 2)
-            rr = round(abs(tp1 - entry) / risk, 2)
-            return {
-                'phase': 'PHASE_1_INDICATION',
-                'phase_title': f"⚡ Phase 1: Strong {latest_ind['direction']} Indication Active (+{total_range} pts)",
-                'is_active_trade': False,
-                'direction': latest_ind['direction'],
-                'setup_grade': 'B',
-                'grade_desc': f"Phase 1: Impulse Breakout Active (Awaiting Controlled Pullback to {entry_50})",
-                'confluence_score': 55,
-                'indication': latest_ind,
-                'correction': None,
-                'trade_plan': {
-                    'is_active': False,
-                    'direction': latest_ind['direction'],
-                    'action': 'OBSERVING / IMPULSE EXPANSION',
-                    'entry': entry_50,
-                    'stop_loss': sl,
-                    'take_profit': tp1,
-                    'take_profit_1': tp1,
-                    'take_profit_2': tp2,
-                    'take_profit_3': tp3,
-                    'risk_points': round(risk, 2),
-                    'reward_points': round(abs(tp1 - entry_50), 2),
-                    'rr_ratio': f'1:{rr}'
-                }
-            }
+        if is_bull:
+            sl = round(recent_15m_low, 2) if (recent_15m_low is not None and recent_15m_low < curr_price) else round(origin, 2)
+            if sl >= curr_price:
+                sl = round(min(origin, curr_price - (total_range * 0.4)), 2)
+        else:
+            sl = round(recent_15m_high, 2) if (recent_15m_high is not None and recent_15m_high > curr_price) else round(origin, 2)
+            if sl <= curr_price:
+                sl = round(max(origin, curr_price + (total_range * 0.4)), 2)
 
         post_candles = candles[ind_end_idx:]
         if not post_candles:
             post_candles = [candles[-1]]
 
         if is_bull:
-            lowest_retrace = min([c['low'] for c in post_candles])
-            retrace_amount = extreme - lowest_retrace
+            lowest_retrace = min([c['low'] for c in post_candles]) if post_candles else curr_price
+            retrace_amount = max(extreme - lowest_retrace, 0.0)
             retrace_pct = round((retrace_amount / max(total_range, 0.001)) * 100, 1)
 
-            if lowest_retrace <= origin:
-                return {
-                    'phase': 'STANDBY',
-                    'phase_title': 'Indication Blown (Origin Breached) - Resetting',
-                    'is_active_trade': False,
-                    'direction': 'NEUTRAL',
-                    'setup_grade': 'F',
-                    'grade_desc': 'Indication Invalidated (Pullback exceeded 100% of origin)',
-                    'confluence_score': 0,
-                    'indication': latest_ind,
-                    'correction': None,
-                    'trade_plan': {
-                        'is_active': False,
-                        'direction': 'NEUTRAL',
-                        'entry': entry_50,
-                        'stop_loss': ote_sl_bull,
-                        'take_profit': extreme,
-                        'take_profit_1': extreme,
-                        'take_profit_2': round(entry_50 + (total_range * 1.5), 2),
-                        'take_profit_3': round(entry_50 + (total_range * 2.5), 2),
-                        'rr_ratio': '--'
-                    }
-                }
-
-            is_in_healthy_zone = 28.0 <= retrace_pct <= 75.0
+            is_in_healthy_zone = 20.0 <= retrace_pct <= 75.0
             last_c = candles[-1]
             prev_c = candles[-2] if len(candles) >= 2 else last_c
-            bullish_reversal_trigger = (last_c['close'] > last_c['open'] and (last_c['close'] > prev_c['high'] or curr_price >= entry_50))
+            bullish_reversal_trigger = (last_c['close'] > last_c['open'] and (last_c['close'] > prev_c['high'] or curr_price >= entry_50)) or (curr_price >= extreme)
 
             correction_info = {
-                'status': 'HEALTHY GOLDEN ZONE' if is_in_healthy_zone else 'SHALLOW/DEEP',
+                'status': 'HEALTHY GOLDEN ZONE' if is_in_healthy_zone else ('SHALLOW / EXPANSION' if retrace_pct < 20.0 else 'DEEP PULLBACK'),
                 'lowest_price': lowest_retrace,
                 'retrace_pct': retrace_pct,
                 'zone_bottom': latest_ind['retrace_618'],
@@ -225,17 +173,15 @@ class ICCEngine:
             }
 
             active_entry = round(curr_price, 2)
-            active_sl = ote_sl_bull
-            risk = max(abs(active_entry - active_sl), 1.0)
-            tp1 = max(extreme, round(active_entry + (risk * 2.0), 2))
-            tp2 = round(active_entry + (risk * 3.0), 2)
-            tp3 = round(active_entry + (risk * 4.0), 2)
-            reward = abs(tp1 - active_entry)
-            rr = round(reward / risk, 2)
+            risk = max(active_entry - sl, 2.0)
+            tp1 = max(extreme, round(active_entry + (risk * 1.5), 2))
+            tp2 = round(active_entry + (risk * 2.5), 2)
+            tp3 = round(active_entry + (risk * 3.5), 2)
+            rr = round((tp1 - active_entry) / risk, 2)
 
-            if is_in_healthy_zone and bullish_reversal_trigger and rr >= 1.8:
-                setup_grade = 'A+' if (40.0 <= retrace_pct <= 65.0 and rr >= 2.5) else 'A'
-                grade_desc = f'ICC Grade {setup_grade}: Reversal Triggered out of {retrace_pct}% Golden Zone. 1:{rr} RR to Peak TP1 ({tp1})'
+            if (is_in_healthy_zone and bullish_reversal_trigger) or curr_price >= extreme:
+                setup_grade = 'A+' if rr >= 2.0 else 'A'
+                grade_desc = f'ICC Grade {setup_grade}: 15M Swing Low Protected at {sl}. Target TP: {tp2} (1:{rr} RR)'
                 return {
                     'phase': 'PHASE_3_CONTINUATION',
                     'phase_title': f'🚀 PHASE 3: BULLISH CONTINUATION ARMED (1:{rr} RR)',
@@ -249,25 +195,26 @@ class ICCEngine:
                     'trade_plan': {
                         'is_active': True,
                         'direction': 'BULLISH',
-                        'action': 'BUY LIMIT / IN ZONE',
+                        'action': 'BUY LIMIT / CONTINUATION TRIGGER',
                         'entry': active_entry,
-                        'stop_loss': active_sl,
-                        'take_profit': tp1,
+                        'stop_loss': sl,
+                        'take_profit': tp2,
+                        'tp1_indication_high': tp1,
                         'take_profit_1': tp1,
                         'take_profit_2': tp2,
                         'take_profit_3': tp3,
                         'risk_points': round(risk, 2),
-                        'reward_points': round(reward, 2),
+                        'reward_points': round(tp2 - active_entry, 2),
                         'rr_ratio': f'1:{rr}'
                     }
                 }
             else:
-                planned_risk = max(abs(entry_50 - ote_sl_bull), 1.0)
-                p_tp1 = max(extreme, round(entry_50 + (planned_risk * 2.0), 2))
-                p_tp2 = round(entry_50 + (planned_risk * 3.0), 2)
-                p_tp3 = round(entry_50 + (planned_risk * 4.0), 2)
-                planned_reward = abs(p_tp1 - entry_50)
-                planned_rr = round(planned_reward / planned_risk, 2)
+                planned_entry = entry_50
+                planned_risk = max(planned_entry - sl, 2.0)
+                p_tp1 = max(extreme, round(planned_entry + (planned_risk * 1.5), 2))
+                p_tp2 = round(planned_entry + (planned_risk * 2.5), 2)
+                p_tp3 = round(planned_entry + (planned_risk * 3.5), 2)
+                planned_rr = round((p_tp2 - planned_entry) / planned_risk, 2)
 
                 return {
                     'phase': 'PHASE_2_CORRECTION',
@@ -275,7 +222,7 @@ class ICCEngine:
                     'is_active_trade': False,
                     'direction': 'BULLISH',
                     'setup_grade': 'B',
-                    'grade_desc': f'Phase 2: Retracing into Golden Zone (50% Eq: {entry_50}) - Target Peak TP1: {p_tp1} (1:{planned_rr} RR)',
+                    'grade_desc': f'Phase 2: Retracing into 50% Eq ({planned_entry}) - 15M Swing SL: {sl} | Target TP: {p_tp2}',
                     'confluence_score': 65 if is_in_healthy_zone else 45,
                     'indication': latest_ind,
                     'correction': correction_info,
@@ -283,54 +230,31 @@ class ICCEngine:
                         'is_active': False,
                         'direction': 'BULLISH',
                         'action': 'PULLBACK IN PROGRESS',
-                        'entry': entry_50,
-                        'stop_loss': ote_sl_bull,
-                        'take_profit': p_tp1,
+                        'entry': planned_entry,
+                        'stop_loss': sl,
+                        'take_profit': p_tp2,
+                        'tp1_indication_high': p_tp1,
                         'take_profit_1': p_tp1,
                         'take_profit_2': p_tp2,
                         'take_profit_3': p_tp3,
                         'risk_points': round(planned_risk, 2),
-                        'reward_points': round(planned_reward, 2),
+                        'reward_points': round(p_tp2 - planned_entry, 2),
                         'rr_ratio': f'1:{planned_rr}'
                     }
                 }
 
         else: # BEARISH INDICATION
-            highest_retrace = max([c['high'] for c in post_candles])
-            retrace_amount = highest_retrace - extreme
+            highest_retrace = max([c['high'] for c in post_candles]) if post_candles else curr_price
+            retrace_amount = max(highest_retrace - extreme, 0.0)
             retrace_pct = round((retrace_amount / max(total_range, 0.001)) * 100, 1)
 
-            if highest_retrace >= origin:
-                return {
-                    'phase': 'STANDBY',
-                    'phase_title': 'Indication Blown (Origin Breached) - Resetting',
-                    'is_active_trade': False,
-                    'direction': 'NEUTRAL',
-                    'setup_grade': 'F',
-                    'grade_desc': 'Indication Invalidated (Pullback exceeded 100% of origin)',
-                    'confluence_score': 0,
-                    'indication': latest_ind,
-                    'correction': None,
-                    'trade_plan': {
-                        'is_active': False,
-                        'direction': 'NEUTRAL',
-                        'entry': entry_50,
-                        'stop_loss': ote_sl_bear,
-                        'take_profit': extreme,
-                        'take_profit_1': extreme,
-                        'take_profit_2': round(entry_50 - (total_range * 1.5), 2),
-                        'take_profit_3': round(entry_50 - (total_range * 2.5), 2),
-                        'rr_ratio': '--'
-                    }
-                }
-
-            is_in_healthy_zone = 28.0 <= retrace_pct <= 75.0
+            is_in_healthy_zone = 20.0 <= retrace_pct <= 75.0
             last_c = candles[-1]
             prev_c = candles[-2] if len(candles) >= 2 else last_c
-            bearish_reversal_trigger = (last_c['close'] < last_c['open'] and (last_c['close'] < prev_c['low'] or curr_price <= entry_50))
+            bearish_reversal_trigger = (last_c['close'] < last_c['open'] and (last_c['close'] < prev_c['low'] or curr_price <= entry_50)) or (curr_price <= extreme)
 
             correction_info = {
-                'status': 'HEALTHY GOLDEN ZONE' if is_in_healthy_zone else 'SHALLOW/DEEP',
+                'status': 'HEALTHY GOLDEN ZONE' if is_in_healthy_zone else ('SHALLOW / EXPANSION' if retrace_pct < 20.0 else 'DEEP PULLBACK'),
                 'highest_price': highest_retrace,
                 'retrace_pct': retrace_pct,
                 'zone_bottom': latest_ind['retrace_382'],
@@ -339,17 +263,15 @@ class ICCEngine:
             }
 
             active_entry = round(curr_price, 2)
-            active_sl = ote_sl_bear
-            risk = max(abs(active_sl - active_entry), 1.0)
-            tp1 = min(extreme, round(active_entry - (risk * 2.0), 2))
-            tp2 = round(active_entry - (risk * 3.0), 2)
-            tp3 = round(active_entry - (risk * 4.0), 2)
-            reward = abs(active_entry - tp1)
-            rr = round(reward / risk, 2)
+            risk = max(sl - active_entry, 2.0)
+            tp1 = min(extreme, round(active_entry - (risk * 1.5), 2))
+            tp2 = round(active_entry - (risk * 2.5), 2)
+            tp3 = round(active_entry - (risk * 3.5), 2)
+            rr = round((active_entry - tp1) / risk, 2)
 
-            if is_in_healthy_zone and bearish_reversal_trigger and rr >= 1.8:
-                setup_grade = 'A+' if (40.0 <= retrace_pct <= 65.0 and rr >= 2.5) else 'A'
-                grade_desc = f'ICC Grade {setup_grade}: Reversal Triggered out of {retrace_pct}% Golden Zone. 1:{rr} RR to Low TP1 ({tp1})'
+            if (is_in_healthy_zone and bearish_reversal_trigger) or curr_price <= extreme:
+                setup_grade = 'A+' if rr >= 2.0 else 'A'
+                grade_desc = f'ICC Grade {setup_grade}: 15M Swing High Protected at {sl}. Target TP: {tp2} (1:{rr} RR)'
                 return {
                     'phase': 'PHASE_3_CONTINUATION',
                     'phase_title': f'🚀 PHASE 3: BEARISH CONTINUATION ARMED (1:{rr} RR)',
@@ -363,25 +285,26 @@ class ICCEngine:
                     'trade_plan': {
                         'is_active': True,
                         'direction': 'BEARISH',
-                        'action': 'SELL LIMIT / IN ZONE',
+                        'action': 'SELL LIMIT / CONTINUATION TRIGGER',
                         'entry': active_entry,
-                        'stop_loss': active_sl,
-                        'take_profit': tp1,
+                        'stop_loss': sl,
+                        'take_profit': tp2,
+                        'tp1_indication_low': tp1,
                         'take_profit_1': tp1,
                         'take_profit_2': tp2,
                         'take_profit_3': tp3,
                         'risk_points': round(risk, 2),
-                        'reward_points': round(reward, 2),
+                        'reward_points': round(active_entry - tp2, 2),
                         'rr_ratio': f'1:{rr}'
                     }
                 }
             else:
-                planned_risk = max(abs(ote_sl_bear - entry_50), 1.0)
-                p_tp1 = min(extreme, round(entry_50 - (planned_risk * 2.0), 2))
-                p_tp2 = round(entry_50 - (planned_risk * 3.0), 2)
-                p_tp3 = round(entry_50 - (planned_risk * 4.0), 2)
-                planned_reward = abs(entry_50 - p_tp1)
-                planned_rr = round(planned_reward / planned_risk, 2)
+                planned_entry = entry_50
+                planned_risk = max(sl - planned_entry, 2.0)
+                p_tp1 = min(extreme, round(planned_entry - (planned_risk * 1.5), 2))
+                p_tp2 = round(planned_entry - (planned_risk * 2.5), 2)
+                p_tp3 = round(planned_entry - (planned_risk * 3.5), 2)
+                planned_rr = round((planned_entry - p_tp2) / planned_risk, 2)
 
                 return {
                     'phase': 'PHASE_2_CORRECTION',
@@ -389,7 +312,7 @@ class ICCEngine:
                     'is_active_trade': False,
                     'direction': 'BEARISH',
                     'setup_grade': 'B',
-                    'grade_desc': f'Phase 2: Retracing into Golden Zone (50% Eq: {entry_50}) - Target Low TP1: {p_tp1} (1:{planned_rr} RR)',
+                    'grade_desc': f'Phase 2: Retracing into 50% Eq ({planned_entry}) - 15M Swing SL: ${sl} | Target TP: {p_tp2}',
                     'confluence_score': 65 if is_in_healthy_zone else 45,
                     'indication': latest_ind,
                     'correction': correction_info,
@@ -397,14 +320,15 @@ class ICCEngine:
                         'is_active': False,
                         'direction': 'BEARISH',
                         'action': 'PULLBACK IN PROGRESS',
-                        'entry': entry_50,
-                        'stop_loss': ote_sl_bear,
-                        'take_profit': p_tp1,
+                        'entry': planned_entry,
+                        'stop_loss': sl,
+                        'take_profit': p_tp2,
+                        'tp1_indication_low': p_tp1,
                         'take_profit_1': p_tp1,
                         'take_profit_2': p_tp2,
                         'take_profit_3': p_tp3,
                         'risk_points': round(planned_risk, 2),
-                        'reward_points': round(planned_reward, 2),
+                        'reward_points': round(planned_entry - p_tp2, 2),
                         'rr_ratio': f'1:{planned_rr}'
                     }
                 }
@@ -442,23 +366,71 @@ class ICCEngine:
         tf30_candles = cls.aggregate_candles(candles, 6)
         tf60_candles = cls.aggregate_candles(candles, 12)
 
-        # Extract 15M Swings for Protected SL (Most Recent 15M Swing Low / High)
-        tf15_highs, tf15_lows = cls.find_swings(tf15_candles, window=1)
-        recent_15m_low = tf15_lows[-1]['price'] if tf15_lows else (min([c['low'] for c in tf15_candles[-10:]]) if tf15_candles else min([c['low'] for c in candles[-30:]]))
-        recent_15m_high = tf15_highs[-1]['price'] if tf15_highs else (max([c['high'] for c in tf15_candles[-10:]]) if tf15_candles else max([c['high'] for c in candles[-30:]]))
-
-        # 2. Extract 5M LTF Lifecycle with 15M Swing SL
-        swing_highs, swing_lows = cls.find_swings(candles, window=2)
-        indications = cls.detect_indications(candles, swing_highs, swing_lows)
-        ltf_state = cls.evaluate_icc_lifecycle(candles, indications, recent_15m_low=recent_15m_low, recent_15m_high=recent_15m_high)
-
-        # 3. Extract 1H HTF Trend Direction (Strictly dictates the ICC primary direction)
+        # Determine 1-Hour HTF Trend Direction FIRST
         htf_candles = tf60_candles if len(tf60_candles) >= 3 else (tf30_candles if len(tf30_candles) >= 3 else candles)
         htf_bull = htf_candles[-1]['close'] >= htf_candles[0]['open']
         htf_trend = 'BULLISH' if htf_bull else 'BEARISH'
+        is_bull = htf_trend == 'BULLISH'
 
-        is_ltf_aligned = (ltf_state.get('direction') == htf_trend)
-        is_active = is_ltf_aligned and ltf_state.get('is_active_trade', False) and (ltf_state.get('trade_plan') is not None)
+        # 2. Extract 15M Swings for Protected SL
+        tf15_highs, tf15_lows = cls.find_swings(tf15_candles, window=1)
+        valid_lows = [s['price'] for s in tf15_lows if s['price'] < current_price]
+        recent_15m_low = valid_lows[-1] if valid_lows else (tf15_lows[-1]['price'] if tf15_lows else min([c['low'] for c in tf15_candles[-10:]]))
+        if recent_15m_low >= current_price:
+            recent_15m_low = min([c['low'] for c in candles[-40:]])
+
+        valid_highs = [s['price'] for s in tf15_highs if s['price'] > current_price]
+        recent_15m_high = valid_highs[-1] if valid_highs else (tf15_highs[-1]['price'] if tf15_highs else max([c['high'] for c in tf15_candles[-10:]]))
+        if recent_15m_high <= current_price:
+            recent_15m_high = max([c['high'] for c in candles[-40:]])
+
+        # 3. Extract Indications and FILTER STRICTLY TO HTF TREND BIAS
+        swing_highs, swing_lows = cls.find_swings(candles, window=2)
+        raw_indications = cls.detect_indications(candles, swing_highs, swing_lows)
+        aligned_indications = [ind for ind in raw_indications if ind['direction'] == htf_trend]
+
+        if not aligned_indications:
+            min_l = min(c['low'] for c in candles)
+            max_h = max(c['high'] for c in candles)
+            rng = max_h - min_l
+            if is_bull:
+                orig = recent_15m_low if (recent_15m_low and recent_15m_low < max_h) else min_l
+                tot_r = max_h - orig
+                aligned_indications.append({
+                    'type': 'BULLISH_INDICATION',
+                    'direction': 'BULLISH',
+                    'start_index': 0,
+                    'end_index': max(1, len(candles) - 8),
+                    'origin_price': round(orig, 2),
+                    'extreme_price': round(max_h, 2),
+                    'range': round(tot_r, 2),
+                    'start_time': candles[0]['time'],
+                    'end_time': candles[-1]['time'],
+                    'equilibrium_50': round(orig + (tot_r * 0.5), 2),
+                    'retrace_382': round(max_h - (tot_r * 0.382), 2),
+                    'retrace_618': round(max_h - (tot_r * 0.618), 2)
+                })
+            else:
+                orig = recent_15m_high if (recent_15m_high and recent_15m_high > min_l) else max_h
+                tot_r = orig - min_l
+                aligned_indications.append({
+                    'type': 'BEARISH_INDICATION',
+                    'direction': 'BEARISH',
+                    'start_index': 0,
+                    'end_index': max(1, len(candles) - 8),
+                    'origin_price': round(orig, 2),
+                    'extreme_price': round(min_l, 2),
+                    'range': round(tot_r, 2),
+                    'start_time': candles[0]['time'],
+                    'end_time': candles[-1]['time'],
+                    'equilibrium_50': round(orig - (tot_r * 0.5), 2),
+                    'retrace_382': round(min_l + (tot_r * 0.382), 2),
+                    'retrace_618': round(min_l + (tot_r * 0.618), 2)
+                })
+
+        ltf_state = cls.evaluate_icc_lifecycle(candles, aligned_indications, recent_15m_low=recent_15m_low, recent_15m_high=recent_15m_high)
+
+        is_active = ltf_state.get('is_active_trade', False) and (ltf_state.get('trade_plan') is not None)
 
         if is_active:
             phase = 'PHASE_3_CONTINUATION'
@@ -470,7 +442,7 @@ class ICCEngine:
             phase = 'PHASE_2_CORRECTION'
             phase_title = f"⏳ Phase 2: Pullback in Progress (Waiting for 5M to align with 1H {htf_trend} Bias)"
             setup_grade = 'B'
-            grade_desc = f"1H Macro Bias is {htf_trend}. Waiting for 5M discount pullback & continuation trigger."
+            grade_desc = f"1H Macro Bias is {htf_trend}. Retracing towards discount 50% Eq level."
 
         return {
             'symbol': symbol_key,
@@ -488,7 +460,7 @@ class ICCEngine:
             'indication': ltf_state.get('indication'),
             'correction': ltf_state.get('correction'),
             'trade_plan': ltf_state.get('trade_plan'),
-            'indications_history': indications[-6:],
+            'indications_history': aligned_indications[-6:],
             'swing_highs': swing_highs[-8:],
             'swing_lows': swing_lows[-8:]
         }
