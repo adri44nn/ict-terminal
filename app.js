@@ -415,6 +415,27 @@ function updateRibbonPrices(scanResults) {
 // 3. LIVE SCANNER & RADAR INGESTOR
 // ============================================================================
 async function fetchScan() {
+  // 1. Try Live Backend API First (100% Direct Yahoo Finance Market Feed)
+  try {
+    const ctrl = new AbortController();
+    const tId = setTimeout(() => ctrl.abort(), 2500);
+    const res = await fetch('/api/scan', { signal: ctrl.signal });
+    clearTimeout(tId);
+    if (res.ok) {
+      const data = await res.json();
+      STATE.scanData = data;
+      STATE.iccScanData = { scan_results: data.icc_scan_results || data.scan_results || {} };
+      renderScannerGrid(data.scan_results || {});
+      renderIccScannerGrid(data.icc_scan_results || data.scan_results || {});
+      renderAlertsTable(data.alerts || []);
+      updateGlobalSignalRibbon(data.scan_results || {}, data.icc_scan_results || {});
+      return;
+    }
+  } catch (e) {
+    // API server not present (running on static GitHub Pages) - seamless client fallback
+  }
+
+  // 2. Client-Side Autonomous Engine Fallback
   try {
     if (window.MarketData) {
       const data = await window.MarketData.fetchAllSymbolsData();
@@ -444,20 +465,10 @@ async function fetchScan() {
         }
       }
       renderAlertsTable(clientAlerts);
-      return;
     }
   } catch (e) {
     console.warn("Client-side scan error:", e);
   }
-
-  try {
-    const res = await fetch('/api/scan');
-    const data = await res.json();
-    STATE.scanData = data;
-    renderScannerGrid(data.scan_results || {});
-    renderAlertsTable(data.alerts || []);
-    updateGlobalSignalRibbon(data.scan_results || {}, {});
-  } catch (e) {}
 }
 
 function renderQuickStatusBar(containerId, scanResults, modelType) {
@@ -1101,6 +1112,24 @@ function selectSymbol(sym) {
 }
 
 async function fetchChart(sym, tf) {
+  // 1. Try Live Backend API First (100% Direct Yahoo Finance Market Feed)
+  try {
+    const ctrl = new AbortController();
+    const tId = setTimeout(() => ctrl.abort(), 2500);
+    const res = await fetch(`/api/chart?symbol=${sym}&interval=${tf}`, { signal: ctrl.signal });
+    clearTimeout(tId);
+    if (res.ok) {
+      const data = await res.json();
+      STATE.chartData = data;
+      renderCanvasChart();
+      updateChartSidebar(data.analysis);
+      return;
+    }
+  } catch (e) {
+    // API server not running - seamless client fallback
+  }
+
+  // 2. Client-Side Autonomous Engine Fallback
   try {
     if (window.MarketData && window.ICTEngine) {
       const candles = await window.MarketData.fetchSymbolCandles(sym, tf);
@@ -1113,19 +1142,10 @@ async function fetchChart(sym, tf) {
       };
       renderCanvasChart();
       updateChartSidebar(analysis);
-      return;
     }
   } catch (e) {
-    console.warn("Client chart error, trying API fallback", e);
+    console.warn("Client chart error:", e);
   }
-
-  try {
-    const res = await fetch(`/api/chart?symbol=${sym}&interval=${tf}`);
-    const data = await res.json();
-    STATE.chartData = data;
-    renderCanvasChart();
-    updateChartSidebar(data.analysis);
-  } catch (e) {}
 }
 
 function updateChartSidebar(analysis) {
