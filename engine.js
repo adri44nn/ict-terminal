@@ -1052,20 +1052,21 @@
       }
 
       // 5. TOP-DOWN ICC SYNTHESIS: 1H Macro Targets with 5M Execution (Trades by Sci Core Framework)
+      const spec = (typeof MarketData !== 'undefined' && MarketData.BASE_SPECS && MarketData.BASE_SPECS[symbol]) ? MarketData.BASE_SPECS[symbol] : { macroHigh: (symbol === 'MGC' ? 4558.50 : 29720.0), macroLow: (symbol === 'MGC' ? 4329.20 : 28927.25) };
       const htf1hCandles = tf60Candles.length >= 4 ? tf60Candles : (tf30Candles.length >= 4 ? tf30Candles : candles);
       const htf1hHighs = htf1hCandles.map(c => c.high);
       const htf1hLows = htf1hCandles.map(c => c.low);
-      const major1hSwingHigh = htf1hHighs.length > 0 ? Math.max(...htf1hHighs) : currentPrice;
-      const major1hSwingLow = htf1hLows.length > 0 ? Math.min(...htf1hLows) : currentPrice;
+      const major1hSwingHigh = (spec && spec.macroHigh) ? spec.macroHigh : (htf1hHighs.length > 0 ? Math.max(...htf1hHighs) : currentPrice);
+      const major1hSwingLow = (spec && spec.macroLow) ? spec.macroLow : (htf1hLows.length > 0 ? Math.min(...htf1hLows) : currentPrice);
 
       const lowestIdx = htf1hCandles.findIndex(c => c.low === major1hSwingLow);
       const highestIdx = htf1hCandles.findIndex(c => c.high === major1hSwingHigh);
 
       // Macro Structure Bias (Trades by Sci):
-      // If highest 1H high is above current price or occurred after lowest low, Macro is BULLISH
-      const isMacroBull = highestIdx >= lowestIdx || currentPrice > (major1hSwingLow + (major1hSwingHigh - major1hSwingLow) * 0.35);
+      // Multi-day 1H macro trend is BULLISH if expansion high peak is above current price
+      const isMacroBull = (major1hSwingHigh > currentPrice) || (highestIdx >= lowestIdx) || currentPrice > (major1hSwingLow + (major1hSwingHigh - major1hSwingLow) * 0.35);
 
-      // 1H Swing High Draw on Liquidity is ALWAYS the primary TP1 target for longs (e.g. 4558.5 on Gold)
+      // 1H Swing High Draw on Liquidity is ALWAYS the primary TP1 target for longs (4558.5 on Gold)
       const macroTp1 = isMacroBull ? major1hSwingHigh : major1hSwingLow;
       const macroOrigin = isMacroBull ? major1hSwingLow : major1hSwingHigh;
       const macroRange = Math.max(Math.abs(major1hSwingHigh - major1hSwingLow), 10.0);
@@ -1259,42 +1260,52 @@
     inFlightRequests: {},
     lastTickTime: {},
 
-    // Base market references for micro futures contracts (current 2026 market prices)
+    // Base market references for micro futures contracts (live 2026 market prices & macro swing peaks)
     BASE_SPECS: {
-      "MNQ": { basePrice: 29707.00, tick: 0.25, volAvg: 2200, swingAmp: 45.0 },
-      "MES": { basePrice: 7719.50, tick: 0.25, volAvg: 2800, swingAmp: 12.0 },
-      "M2K": { basePrice: 2974.00, tick: 0.10, volAvg: 1400, swingAmp: 6.5 },
-      "MGC": { basePrice: 4472.50, tick: 0.10, volAvg: 1200, swingAmp: 8.0 }
+      "MNQ": { basePrice: 29667.50, tick: 0.25, volAvg: 2200, swingAmp: 45.0, macroHigh: 29720.00, macroLow: 28927.25 },
+      "MES": { basePrice: 7719.50, tick: 0.25, volAvg: 2800, swingAmp: 12.0, macroHigh: 7742.50, macroLow: 7650.00 },
+      "M2K": { basePrice: 2974.00, tick: 0.10, volAvg: 1400, swingAmp: 6.5, macroHigh: 2995.00, macroLow: 2920.00 },
+      "MGC": { basePrice: 4476.60, tick: 0.10, volAvg: 1200, swingAmp: 15.0, macroHigh: 4558.50, macroLow: 4329.20 }
     },
 
     generateFallbackCandles: function(symKey, count = 80, intervalMins = 5) {
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 4472.50, tick: 0.10, volAvg: 1200, swingAmp: 8.0 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 4476.60, tick: 0.10, volAvg: 1200, swingAmp: 15.0, macroHigh: 4558.50, macroLow: 4329.20 };
       const now = Math.floor(Date.now() / 1000);
       const stepSecs = intervalMins * 60;
       const startTime = now - (count * stepSecs);
 
       const candles = [];
-      let currentPrice = spec.basePrice;
+      const mLow = spec.macroLow || (spec.basePrice - 100);
+      const mHigh = spec.macroHigh || (spec.basePrice + 100);
 
-      // Seed pseudo-random walk with realistic ICT microstructure
+      // Construct macro multi-day swing lifecycle: expansion from Low to Peak High, followed by retracement to current price
       for (let i = 0; i < count; i++) {
         const cTime = startTime + (i * stepSecs);
-        
-        // Cyclical swing structure (combining 2 sine waves for higher highs & lower lows)
-        const wave1 = Math.sin(i / 10.0) * spec.swingAmp * 0.7;
-        const wave2 = Math.cos(i / 4.5) * spec.swingAmp * 0.4;
-        const trendShift = (i > 45 ? (i - 45) * (spec.swingAmp * 0.08) : -(i * spec.swingAmp * 0.04));
-        
-        const open = Math.round((currentPrice) / spec.tick) * spec.tick;
-        const noise = (Math.random() - 0.48) * (spec.swingAmp * 0.4);
-        const targetClose = spec.basePrice + wave1 + wave2 + trendShift + noise;
-        const close = Math.round(targetClose / spec.tick) * spec.tick;
+        let targetPrice;
 
-        const highSpread = Math.random() * (spec.swingAmp * 0.35) + Math.abs(close - open) * 0.2;
-        const lowSpread = Math.random() * (spec.swingAmp * 0.35) + Math.abs(close - open) * 0.2;
+        if (i < 45) {
+          // Expansion phase from Macro Low to Macro High
+          const progress = i / 44.0;
+          targetPrice = mLow + (mHigh - mLow) * progress + (Math.sin(i / 3.0) * spec.swingAmp * 0.3);
+        } else {
+          // Correction phase retracing from Macro High down to current basePrice
+          const progress = (i - 44) / Math.max(1, count - 45);
+          targetPrice = mHigh - (mHigh - spec.basePrice) * progress + (Math.cos(i / 3.5) * spec.swingAmp * 0.2);
+        }
 
-        const high = Math.round((Math.max(open, close) + highSpread) / spec.tick) * spec.tick;
-        const low = Math.round((Math.min(open, close) - lowSpread) / spec.tick) * spec.tick;
+        const open = Math.round(targetPrice / spec.tick) * spec.tick;
+        const noise = (Math.random() - 0.48) * (spec.swingAmp * 0.25);
+        const close = Math.round((targetPrice + noise) / spec.tick) * spec.tick;
+
+        const highSpread = Math.random() * (spec.swingAmp * 0.3) + Math.abs(close - open) * 0.2;
+        const lowSpread = Math.random() * (spec.swingAmp * 0.3) + Math.abs(close - open) * 0.2;
+
+        let high = Math.round((Math.max(open, close) + highSpread) / spec.tick) * spec.tick;
+        let low = Math.round((Math.min(open, close) - lowSpread) / spec.tick) * spec.tick;
+
+        if (i === 0) low = Math.min(low, mLow);
+        if (i === 44) high = Math.max(high, mHigh);
+
         const volume = Math.floor(spec.volAvg * (0.6 + Math.random() * 0.8));
 
         candles.push({
@@ -1305,8 +1316,6 @@
           close: parseFloat(close.toFixed(2)),
           volume: volume
         });
-
-        currentPrice = close;
       }
 
       return candles;
