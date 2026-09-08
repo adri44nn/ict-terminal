@@ -1305,8 +1305,9 @@
       const candles = [];
       const mLow = spec.macroLow || (spec.basePrice - 100);
       const mHigh = spec.macroHigh || (spec.basePrice + 100);
+      const symCode = (symKey.charCodeAt(0) * 17) + (symKey.charCodeAt(1) || 5);
 
-      // Construct macro multi-day swing lifecycle: expansion from Low to Peak High, followed by retracement to current price
+      // Deterministic mathematical generator (Zero random flickering across page refreshes)
       for (let i = 0; i < count; i++) {
         const cTime = startTime + (i * stepSecs);
         let targetPrice;
@@ -1314,27 +1315,25 @@
         if (i < 45) {
           // Expansion phase from Macro Low to Macro High
           const progress = i / 44.0;
-          targetPrice = mLow + (mHigh - mLow) * progress + (Math.sin(i / 3.0) * spec.swingAmp * 0.3);
+          targetPrice = mLow + (mHigh - mLow) * progress + (Math.sin(i / 3.0 + symCode) * spec.swingAmp * 0.25);
         } else {
           // Correction phase retracing from Macro High down to current basePrice
           const progress = (i - 44) / Math.max(1, count - 45);
-          targetPrice = mHigh - (mHigh - spec.basePrice) * progress + (Math.cos(i / 3.5) * spec.swingAmp * 0.2);
+          targetPrice = mHigh - (mHigh - spec.basePrice) * progress + (Math.cos(i / 3.5 + symCode) * spec.swingAmp * 0.18);
         }
 
         const open = Math.round(targetPrice / spec.tick) * spec.tick;
-        const noise = (Math.random() - 0.48) * (spec.swingAmp * 0.25);
-        const close = Math.round((targetPrice + noise) / spec.tick) * spec.tick;
+        const detWiggle = Math.sin(i * 12.9898 + symCode) * (spec.swingAmp * 0.15);
+        const close = Math.round((targetPrice + detWiggle) / spec.tick) * spec.tick;
 
-        const highSpread = Math.random() * (spec.swingAmp * 0.3) + Math.abs(close - open) * 0.2;
-        const lowSpread = Math.random() * (spec.swingAmp * 0.3) + Math.abs(close - open) * 0.2;
-
-        let high = Math.round((Math.max(open, close) + highSpread) / spec.tick) * spec.tick;
-        let low = Math.round((Math.min(open, close) - lowSpread) / spec.tick) * spec.tick;
+        const spread = Math.abs(Math.sin(i * 7.123 + symCode)) * (spec.swingAmp * 0.2) + Math.abs(close - open) * 0.2;
+        let high = Math.round((Math.max(open, close) + spread) / spec.tick) * spec.tick;
+        let low = Math.round((Math.min(open, close) - spread) / spec.tick) * spec.tick;
 
         if (i === 0) low = Math.min(low, mLow);
         if (i === 44) high = Math.max(high, mHigh);
 
-        const volume = Math.floor(spec.volAvg * (0.6 + Math.random() * 0.8));
+        const volume = Math.floor(spec.volAvg * (0.7 + Math.abs(Math.sin(i + symCode)) * 0.6));
 
         candles.push({
           time: cTime,
@@ -1351,11 +1350,18 @@
 
     advanceCachedCandles: function(symKey, intervalMins = 5) {
       if (!this.candleCache[symKey] || this.candleCache[symKey].length === 0) {
+        try {
+          const stored = localStorage.getItem('ict_live_candles_' + symKey);
+          if (stored) {
+            this.candleCache[symKey] = JSON.parse(stored);
+            return this.candleCache[symKey];
+          }
+        } catch (e) {}
         this.candleCache[symKey] = this.generateFallbackCandles(symKey, 80, intervalMins);
         return this.candleCache[symKey];
       }
 
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 4472.50, tick: 0.10, volAvg: 1200, swingAmp: 8.0 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 4476.60, tick: 0.10, volAvg: 1200, swingAmp: 15.0 };
       const candles = this.candleCache[symKey];
       const last = candles[candles.length - 1];
       const now = Math.floor(Date.now() / 1000);
@@ -1363,12 +1369,11 @@
 
       // Check if new candle timeframe has started
       if (now - last.time >= stepSecs) {
-        // Form a new candle
         const newOpen = last.close;
-        const delta = (Math.random() - 0.49) * (spec.swingAmp * 0.25);
+        const delta = Math.sin(now) * (spec.swingAmp * 0.15);
         const newClose = Math.round((newOpen + delta) / spec.tick) * spec.tick;
-        const newHigh = Math.round((Math.max(newOpen, newClose) + Math.random() * (spec.swingAmp * 0.15)) / spec.tick) * spec.tick;
-        const newLow = Math.round((Math.min(newOpen, newClose) - Math.random() * (spec.swingAmp * 0.15)) / spec.tick) * spec.tick;
+        const newHigh = Math.round((Math.max(newOpen, newClose) + Math.abs(Math.sin(now * 1.5)) * (spec.swingAmp * 0.1)) / spec.tick) * spec.tick;
+        const newLow = Math.round((Math.min(newOpen, newClose) - Math.abs(Math.cos(now * 1.5)) * (spec.swingAmp * 0.1)) / spec.tick) * spec.tick;
 
         candles.push({
           time: last.time + stepSecs,
@@ -1376,18 +1381,10 @@
           high: parseFloat(newHigh.toFixed(2)),
           low: parseFloat(newLow.toFixed(2)),
           close: parseFloat(newClose.toFixed(2)),
-          volume: Math.floor(spec.volAvg * (0.5 + Math.random() * 0.7))
+          volume: Math.floor(spec.volAvg * 0.8)
         });
 
         if (candles.length > 120) candles.shift();
-      } else {
-        // Micro-tick update current candle
-        const tickMove = (Math.random() > 0.5 ? 1 : -1) * spec.tick * (Math.random() > 0.7 ? 2 : 1);
-        const updatedClose = Math.round((last.close + tickMove) / spec.tick) * spec.tick;
-        last.close = parseFloat(updatedClose.toFixed(2));
-        if (last.close > last.high) last.high = last.close;
-        if (last.close < last.low) last.low = last.close;
-        last.volume += Math.floor(Math.random() * 15);
       }
 
       return candles;
@@ -1414,7 +1411,7 @@
 
         const fetchCandidate = async (url) => {
           const ctrl = new AbortController();
-          const tId = setTimeout(() => ctrl.abort(), 3500);
+          const tId = setTimeout(() => ctrl.abort(), 2800);
           try {
             const resp = await fetch(url, { signal: ctrl.signal });
             clearTimeout(tId);
@@ -1461,11 +1458,14 @@
         try {
           const liveResult = await Promise.race([
             ...targetUrls.map(u => fetchCandidate(u)),
-            new Promise(res => setTimeout(() => res(null), 3800))
+            new Promise(res => setTimeout(() => res(null), 3000))
           ]);
 
           if (liveResult && liveResult.length > 5) {
             this.candleCache[symKey] = liveResult;
+            try {
+              localStorage.setItem('ict_live_candles_' + symKey, JSON.stringify(liveResult));
+            } catch (e) {}
             const lastCandle = liveResult[liveResult.length - 1];
             if (lastCandle && lastCandle.close) {
               if (this.BASE_SPECS[symKey]) {
@@ -1476,7 +1476,7 @@
           }
         } catch (err) {}
 
-        // Fallback to high-fidelity continuous market simulation anchored to latest base price
+        // Use cached real live candles or deterministic fallback
         return this.advanceCachedCandles(symKey, intervalMins);
       })();
 
