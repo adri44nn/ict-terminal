@@ -1063,10 +1063,10 @@ window.quickPaperExecute = function(sym, dir, entry, sl, tp, setup) {
 // 4. CHART ENGINE
 // ============================================================================
 const TV_SYMBOLS = {
-  'MNQ': 'CME_MINI:NQ1!',
-  'MES': 'CME_MINI:ES1!',
-  'M2K': 'CME_MINI:RTY1!',
-  'MGC': 'COMEX:GC1!'
+  'MNQ': 'CAPITALCOM:US100',
+  'MES': 'CAPITALCOM:US500',
+  'M2K': 'CAPITALCOM:US2000',
+  'MGC': 'TVC:GOLD'
 };
 
 const TV_INTERVAL_MAP = {
