@@ -430,7 +430,11 @@
           const reward = target - entry;
           const rr = risk > 0 ? reward / risk : 0;
 
-          if (rr >= 1.8) {
+          // ICT Filter: Setup is only ACTIVE if Target has NOT already been reached and SL not breached
+          const targetAlreadyHit = currentPrice >= target;
+          const slBreached = currentPrice <= sl;
+
+          if (rr >= 1.8 && !targetAlreadyHit && !slBreached) {
             tradePlan = {
               is_active: true,
               direction: "BULLISH",
@@ -447,8 +451,8 @@
             setupType = "ICT 2022 Mentorship Model (Bullish Buy Limit)";
           }
         }
-      } else if (direction === "BEARISH" && hasFVG && hasMSS) {
-        const matchingFvg = unmitigatedFVGs.filter(f => f.type === "BEARISH_FVG").slice(-1)[0];
+      } else if (isBearCandidate) {
+        const matchingFvg = recentBearFvgs.slice(-1)[0];
         if (matchingFvg) {
           const entry = matchingFvg.bottom;
           const sl = matchingFvg.top + (spec.tick * 4);
@@ -459,7 +463,11 @@
           const reward = entry - target;
           const rr = risk > 0 ? reward / risk : 0;
 
-          if (rr >= 1.8) {
+          // ICT Filter: Setup is only ACTIVE if Target has NOT already been reached and SL not breached
+          const targetAlreadyHit = currentPrice <= target;
+          const slBreached = currentPrice >= sl;
+
+          if (rr >= 1.8 && !targetAlreadyHit && !slBreached) {
             tradePlan = {
               is_active: true,
               direction: "BEARISH",
