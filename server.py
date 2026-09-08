@@ -191,21 +191,23 @@ class ICTRequestHandler(SimpleHTTPRequestHandler):
             icc_results = {}
             for sym in SYMBOLS.keys():
                 key = f"{sym}_5m"
+                candles = None
                 if key in CACHE["data"]:
                     results[sym] = CACHE["data"][key]["analysis"]
+                    candles = CACHE["data"][key]["candles"]
                 else:
                     candles = get_symbol_candles(sym, "5m")
                     if candles:
                         analysis = engine.analyze_symbol(sym, candles, "5m")
                         results[sym] = analysis
+                        CACHE["data"][key] = {"candles": candles[-120:], "analysis": analysis, "timestamp": time.time()}
 
                 if key in CACHE["icc_data"]:
                     icc_results[sym] = CACHE["icc_data"][key]["analysis"]
-                else:
-                    candles = get_symbol_candles(sym, "5m")
-                    if candles:
-                        analysis = icc_engine.analyze_symbol(sym, candles, "5m")
-                        icc_results[sym] = analysis
+                elif candles:
+                    analysis = icc_engine.analyze_symbol(sym, candles, "5m")
+                    icc_results[sym] = analysis
+                    CACHE["icc_data"][key] = {"analysis": analysis, "timestamp": time.time()}
             
             self.send_json({
                 "killzone": engine.get_killzone_status(),
@@ -221,11 +223,17 @@ class ICTRequestHandler(SimpleHTTPRequestHandler):
                 key = f"{sym}_5m"
                 if key in CACHE["icc_data"]:
                     results[sym] = CACHE["icc_data"][key]["analysis"]
+                elif key in CACHE["data"]:
+                    candles = CACHE["data"][key]["candles"]
+                    analysis = icc_engine.analyze_symbol(sym, candles, "5m")
+                    results[sym] = analysis
+                    CACHE["icc_data"][key] = {"analysis": analysis, "timestamp": time.time()}
                 else:
                     candles = get_symbol_candles(sym, "5m")
                     if candles:
                         analysis = icc_engine.analyze_symbol(sym, candles, "5m")
                         results[sym] = analysis
+                        CACHE["icc_data"][key] = {"analysis": analysis, "timestamp": time.time()}
             
             self.send_json({
                 "scan_results": results,
@@ -257,7 +265,7 @@ class ICTRequestHandler(SimpleHTTPRequestHandler):
                 })
             return
 
-        elif path == "/api/paper":
+        elif path in ("/api/paper", "/api/paper/account"):
             self.send_json(CACHE["paper_account"])
             return
 
