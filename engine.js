@@ -1276,14 +1276,14 @@
 
     // Base market references for micro futures contracts (live 2026 intraday prices & 15M swing structural levels)
     BASE_SPECS: {
-      "MNQ": { basePrice: 29523.50, tick: 0.25, volAvg: 2200, swingAmp: 35.0, intradayHigh: 29650.00, intradayLow: 29480.00 },
-      "MES": { basePrice: 7679.00, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7725.00, intradayLow: 7670.00 },
-      "M2K": { basePrice: 2963.50, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2980.00, intradayLow: 2955.00 },
-      "MGC": { basePrice: 4399.50, tick: 0.10, volAvg: 1200, swingAmp: 12.0, intradayHigh: 4465.00, intradayLow: 4390.00 }
+      "MNQ": { basePrice: 29428.00, tick: 0.25, volAvg: 2200, swingAmp: 35.0, intradayHigh: 29550.00, intradayLow: 29380.00 },
+      "MES": { basePrice: 7646.25, tick: 0.25, volAvg: 2800, swingAmp: 12.0, intradayHigh: 7695.00, intradayLow: 7635.00 },
+      "M2K": { basePrice: 2922.20, tick: 0.10, volAvg: 1400, swingAmp: 6.5, intradayHigh: 2950.00, intradayLow: 2915.00 },
+      "MGC": { basePrice: 4446.00, tick: 0.10, volAvg: 1200, swingAmp: 12.0, intradayHigh: 4465.00, intradayLow: 4425.00 }
     },
 
     generateFallbackCandles: function(symKey, count = 80, intervalMins = 5) {
-      const spec = this.BASE_SPECS[symKey] || { basePrice: 7679.00, tick: 0.25, volAvg: 1200, swingAmp: 12.0, intradayHigh: 7725.00, intradayLow: 7670.00 };
+      const spec = this.BASE_SPECS[symKey] || { basePrice: 7646.25, tick: 0.25, volAvg: 1200, swingAmp: 12.0, intradayHigh: 7695.00, intradayLow: 7635.00 };
       const now = Math.floor(Date.now() / 1000);
       const stepSecs = intervalMins * 60;
       const startTime = now - (count * stepSecs);
@@ -1335,7 +1335,7 @@
     },
 
     advanceCachedCandles: function(symKey, intervalMins = 5) {
-      const cacheKey = 'ict_live_candles_v12_' + symKey;
+      const cacheKey = 'ict_live_candles_v13_' + symKey;
       if (!this.candleCache[symKey] || this.candleCache[symKey].length === 0) {
         try {
           const stored = localStorage.getItem(cacheKey);
