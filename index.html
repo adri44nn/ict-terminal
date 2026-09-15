@@ -8,11 +8,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="ICT Radar">
+  <meta name="apple-mobile-web-app-title" content="PB Trades Replay">
   <meta name="theme-color" content="#0a0e17">
-  <link rel="manifest" href="manifest.json?v=4.1">
-  <title>ICT Apex Terminal & Live Micro Scanner</title>
-  <link rel="stylesheet" href="styles.css?v=4.1">
+  <link rel="manifest" href="manifest.json?v=5.0">
+  <title>PB Trades ICT Replay Backtester & Academy</title>
+  <link rel="stylesheet" href="styles.css?v=6.2">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230a0e17%22/><text x=%2250%22 y=%2270%22 font-size=%2265%22 text-anchor=%22middle%22>⚡</text></svg>">
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -24,8 +24,8 @@
     <div class="brand-section">
       <div class="brand-logo">⚡</div>
       <div class="brand-title">
-        <h1>ICT APEX</h1>
-        <div class="brand-subtitle">Micro Radar</div>
+        <h1>PB TRADES ICT</h1>
+        <div class="brand-subtitle">Replay FX & Academy</div>
       </div>
     </div>
 
@@ -99,19 +99,360 @@
 
   <!-- MAIN NAVIGATION TABS -->
   <nav class="nav-tabs">
-    <button class="nav-tab-btn active" data-tab="scannerTab">⚡ ICT Scanner</button>
+    <button class="nav-tab-btn active" data-tab="replayTab">⏮️ Replay Backtest</button>
+    <button class="nav-tab-btn" data-tab="markupTestTab">🎯 Markup Test</button>
+    <button class="nav-tab-btn" data-tab="pbAcademyTab">🎓 PB Trades Academy</button>
+    <button class="nav-tab-btn" data-tab="scannerTab">⚡ ICT Scanner</button>
     <button class="nav-tab-btn" data-tab="iccTab">🔬 ICC Radar</button>
-    <button class="nav-tab-btn" data-tab="chartTab">📈 Chart</button>
-    <button class="nav-tab-btn" data-tab="academyTab">🎓 Academy</button>
-    <button class="nav-tab-btn" data-tab="paperTab">💼 Paper</button>
+    <button class="nav-tab-btn" data-tab="chartTab">📈 Live Chart</button>
+    <button class="nav-tab-btn" data-tab="paperTab">💼 Journal</button>
   </nav>
 
   <!-- MAIN CONTAINER -->
   <main class="app-container">
 
-    <!-- 1. LIVE ICT SCANNER & RADAR TAB -->
-    <section id="scannerTab" class="tab-view active">
-      <!-- QUICK SYMBOL STATUS STRIP (FRONT OF LINE JUMPER) -->
+    <!-- ===================================================================== -->
+    <!-- 1. REPLAY FX-STYLE BACKTESTER TAB (MAIN PRIORITIZED VIEW) -->
+    <!-- ===================================================================== -->
+    <section id="replayTab" class="tab-view active">
+      
+      <!-- REPLAY CONTROLS & SCENARIO TOP STRIP -->
+      <div class="replay-top-strip">
+        <div class="scenario-selector-box">
+          <label for="replayScenarioSelect" style="font-size: 11px; font-weight: 700; color: var(--accent-cyan);">📚 PRACTICE SCENARIO:</label>
+          <select id="replayScenarioSelect" class="scenario-dropdown">
+            <!-- Populated via JS from REPLAY_SCENARIOS -->
+          </select>
+          <button class="btn btn-secondary btn-sm" id="scenarioInfoBtn" title="View Scenario Goals & Study Guide">ℹ️ Playbook</button>
+        </div>
+
+        <!-- SPLIT-SCREEN / DUAL CHART SMT TOGGLES -->
+        <div class="pill-group" id="replayLayoutPills">
+          <button class="pill-btn active" data-layout="single" title="Single Chart View">⬛ Single</button>
+          <button class="pill-btn" data-layout="dual" title="Side-by-Side Dual Charts for NQ vs ES SMT Divergence">◫ Side-by-Side (SMT)</button>
+          <button class="pill-btn" data-layout="stacked" title="Stacked Dual Charts">⬒ Stacked</button>
+        </div>
+
+        <div class="pill-group" id="replayTfPills">
+          <button class="pill-btn" data-tf="1m">1m</button>
+          <button class="pill-btn active" data-tf="5m">5m</button>
+          <button class="pill-btn" data-tf="15m">15m</button>
+          <button class="pill-btn" data-tf="30m">30m</button>
+          <button class="pill-btn" data-tf="1h">1h</button>
+          <button class="pill-btn" data-tf="4h">4h</button>
+          <button class="pill-btn" data-tf="1d">Daily</button>
+        </div>
+
+        <!-- SESSION MARKOUTS TOGGLE BUTTON -->
+        <button class="pill-btn auto-markup-toggle-btn active" id="replaySessionsToggleBtn" title="Toggle Multi-Session Markouts (Asia High/Low, London High/Low, Midnight Open, PDH/PDL) ON/OFF">
+          🕒 Sessions: <span class="status-text">ON</span>
+        </button>
+
+        <!-- AUTO-MARKUP TOGGLE BUTTON -->
+        <button class="pill-btn auto-markup-toggle-btn" id="replayAutoMarkupToggleBtn" title="Toggle Auto ICT Markups (FVGs) ON/OFF to compare with your own">
+          ⚡ Auto FVGs: <span class="status-text">OFF</span>
+        </button>
+      </div>
+
+      <!-- MAIN BACKTEST WORKSPACE (CANVAS + DRAWING TOOLBAR + EXECUTION SIDEBAR) -->
+      <div class="replay-workspace">
+
+        <!-- TRADINGVIEW-STYLE DRAWING TOOLBAR (LEFT / TOP ON MOBILE) -->
+        <div class="tv-drawing-toolbar" id="tvDrawingToolbar">
+          <button class="tool-btn active" data-tool="pointer" title="Select & Pan Chart">↖️</button>
+          <button class="tool-btn" data-tool="fvg" title="Draw FVG Box (with 50% CE Line)">🟩 FVG</button>
+          <button class="tool-btn" data-tool="liquidity" title="BSL / SSL Liquidity Ray">🟣 Liq</button>
+          <button class="tool-btn" data-tool="ote" title="ICT Fibonacci: Premium / Discount Equilibrium (0.50) & OTE (0.62-0.705-0.79)">📐 Fib / EQ</button>
+          <button class="tool-btn" data-tool="long_pos" title="Long Position Risk:Reward Tool">🟢 Long</button>
+          <button class="tool-btn" data-tool="short_pos" title="Short Position Risk:Reward Tool">🔴 Short</button>
+          <button class="tool-btn" data-tool="trendline" title="Trendline / Ray">📈 Line</button>
+          <button class="tool-btn" data-tool="brush" title="Pencil / Freehand">✏️ Pen</button>
+          <button class="tool-btn" data-tool="toggle_automarkup" id="toolAutoMarkupBtn" title="Toggle Auto ICT Markups (FVGs, Liquidity, Sessions) ON/OFF">⚡ Auto</button>
+          <button class="tool-btn" data-tool="cut" id="toolCutBtn" title="Scissors: Cut & Start Replay at Clicked Bar">✂️ Cut</button>
+          <button class="tool-btn" data-tool="zoom_in" id="toolZoomInBtn" title="Zoom In (+)">🔍+</button>
+          <button class="tool-btn" data-tool="zoom_out" id="toolZoomOutBtn" title="Zoom Out (-)">🔍−</button>
+          <button class="tool-btn" data-tool="zoom_reset" id="toolZoomResetBtn" title="Reset View (0)">↺</button>
+          <button class="tool-btn" data-tool="undo" id="toolUndoBtn" title="Undo Last Drawing">↩️</button>
+          <button class="tool-btn" data-tool="clear" title="Clear All Drawings">🗑️</button>
+        </div>
+
+        <!-- CANVAS CHART AREA (SUPPORTS DUAL SPLIT VIEW FOR SMT ANALYSIS) -->
+        <div class="replay-chart-area">
+
+          <!-- REPLAY PLAYER CONTROLS (DOCKED AT TOP OF CHART - EYE LEVEL) -->
+          <div class="replay-player-bar" id="replayPlayerBar">
+            <div class="player-buttons">
+              <button class="player-btn" id="replayJumpStartBtn" title="Jump to Start">⏮️</button>
+              <button class="player-btn" id="replayStepBackBtn" title="Step Back 1 Candle (Left Arrow)">◀️ Step</button>
+              <button class="player-btn play-btn" id="replayPlayPauseBtn" title="Play/Pause Replay (Spacebar)">▶ Play</button>
+              <button class="player-btn" id="replayStepForwardBtn" title="Step Forward 1 Candle (Right Arrow)">Step ▶️</button>
+              <button class="player-btn" id="replayJumpEndBtn" title="Jump to End">⏭️</button>
+            </div>
+
+            <!-- Speed Multiplier -->
+            <div class="speed-selector">
+              <span style="font-size: 11px; color: var(--text-muted);">Speed:</span>
+              <button class="speed-chip" data-speed="0.5">0.5x</button>
+              <button class="speed-chip active" data-speed="1.0">1x</button>
+              <button class="speed-chip" data-speed="2.0">2x</button>
+              <button class="speed-chip" data-speed="5.0">5x</button>
+            </div>
+
+            <!-- Timeline Scrubber -->
+            <div class="timeline-scrubber-box">
+              <input type="range" id="replayScrubber" min="0" max="100" value="20" class="timeline-slider">
+              <div class="replay-time-readout" id="replayTimeReadout">09:30:00 NY</div>
+            </div>
+          </div>
+
+          <div class="replay-charts-container layout-single" id="replayChartsContainer">
+            
+            <!-- Primary Chart (e.g. NQ) -->
+            <div class="canvas-wrapper chart-pane primary-pane" id="replayPrimaryWrapper">
+              <div class="chart-pane-header">
+                <div class="pane-symbol-tag" id="primaryPaneTag">🔴 PRIMARY: MNQ (Nasdaq-100)</div>
+                <div class="pane-status-pill" id="primaryPaneStatus">Synchronized Replay</div>
+              </div>
+              <canvas id="replayCanvas"></canvas>
+            </div>
+
+            <!-- Secondary SMT Comparison Chart (e.g. ES) -->
+            <div class="canvas-wrapper chart-pane secondary-pane" id="replaySecondaryWrapper" style="display: none;">
+              <div class="chart-pane-header">
+                <div class="pane-symbol-tag" id="secondaryPaneTag">🔵 SMT COMPARISON: MES (S&P 500)</div>
+                <div class="pane-controls">
+                  <select id="smtSecondarySymbolSelect" class="smt-dropdown">
+                    <option value="MES" selected>MES (S&P 500)</option>
+                    <option value="MNQ">MNQ (Nasdaq-100)</option>
+                    <option value="M2K">M2K (Russell 2000)</option>
+                    <option value="MGC">MGC (Gold Futures)</option>
+                  </select>
+                  <div class="pill-group pill-group-xs" id="smtSecondaryTfPills">
+                    <button class="pill-btn" data-tf="1m">1m</button>
+                    <button class="pill-btn active" data-tf="5m">5m</button>
+                    <button class="pill-btn" data-tf="15m">15m</button>
+                  </div>
+                </div>
+              </div>
+              <canvas id="replaySecondaryCanvas"></canvas>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- EXECUTION & PB TRADES CHECKLIST SIDEBAR -->
+        <div class="replay-sidebar">
+          
+          <!-- QUICK ORDER ENTRY BOX -->
+          <div class="sidebar-card">
+            <div class="sidebar-card-header">
+              <span class="card-title">⚡ Replay Execution</span>
+              <span class="price-badge" id="replayCurrentPriceBadge">--</span>
+            </div>
+
+            <div class="order-type-toggle">
+              <button class="toggle-pill active" data-ordertype="MARKET">Market</button>
+              <button class="toggle-pill" data-ordertype="LIMIT">Limit</button>
+            </div>
+
+            <div class="order-inputs-grid">
+              <div class="input-group">
+                <label>Contracts / Lots:</label>
+                <input type="number" id="orderSizeInput" value="1" min="1" max="50">
+              </div>
+              <div class="input-group" id="limitPriceGroup" style="display: none;">
+                <label>Limit Price:</label>
+                <input type="number" id="orderLimitPriceInput" step="0.25">
+              </div>
+              <div class="input-group">
+                <label>Stop Loss (SL):</label>
+                <input type="number" id="orderSlInput" step="0.25" placeholder="Optional">
+              </div>
+              <div class="input-group">
+                <label>Take Profit (TP):</label>
+                <input type="number" id="orderTpInput" step="0.25" placeholder="Optional">
+              </div>
+            </div>
+
+            <div class="order-action-btns">
+              <button class="btn btn-buy" id="replayBuyBtn">🟢 BUY / LONG</button>
+              <button class="btn btn-sell" id="replaySellBtn">🔴 SELL / SHORT</button>
+            </div>
+
+            <button class="btn btn-secondary btn-sm" id="applyBracketToOrderBtn" style="width: 100%; margin-top: 8px; font-size: 11px;">
+              🎯 Apply Chart Bracket (SL/TP) to Order
+            </button>
+          </div>
+
+          <!-- MULTI-SESSION INSTITUTIONAL CONTEXT CARD -->
+          <div class="sidebar-card">
+            <div class="sidebar-card-header">
+              <span class="card-title">🌐 Session Context (HTF)</span>
+              <span class="badge-tag" id="sessionBiasBadge">Midnight Discount</span>
+            </div>
+            <div class="session-context-table" id="sessionContextTable">
+              <div class="session-row">
+                <span class="session-label">🕛 Midnight Open:</span>
+                <span class="session-val" id="ctxMidnightOpen">--</span>
+              </div>
+              <div class="session-row">
+                <span class="session-label">🌏 Asian High (BSL):</span>
+                <span class="session-val" id="ctxAsiaHigh">--</span>
+              </div>
+              <div class="session-row">
+                <span class="session-label">🌏 Asian Low (SSL):</span>
+                <span class="session-val" id="ctxAsiaLow">--</span>
+              </div>
+              <div class="session-row">
+                <span class="session-label">🇬🇧 London High:</span>
+                <span class="session-val" id="ctxLondonHigh">--</span>
+              </div>
+              <div class="session-row">
+                <span class="session-label">🇬🇧 London Low:</span>
+                <span class="session-val" id="ctxLondonLow">--</span>
+              </div>
+              <div class="session-row">
+                <span class="session-label">☀️ Prev Day High (PDH):</span>
+                <span class="session-val" id="ctxPdh">--</span>
+              </div>
+              <div class="session-row">
+                <span class="session-label">🌙 Prev Day Low (PDL):</span>
+                <span class="session-val" id="ctxPdl">--</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- PB TRADES 5-POINT SETUP EVALUATOR CHECKLIST -->
+          <div class="sidebar-card">
+            <div class="sidebar-card-header">
+              <span class="card-title">📋 PB Trades Checklist</span>
+              <span class="badge-tag" id="pbChecklistScore">0 / 7</span>
+            </div>
+            <div class="pb-checklist-container" id="pbChecklistContainer">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- REPLAY SIMULATED ACCOUNT & OPEN POSITIONS -->
+          <div class="sidebar-card">
+            <div class="sidebar-card-header">
+              <span class="card-title">💼 Backtest Account</span>
+              <button class="btn btn-secondary btn-xs" id="replayResetAccountBtn">Reset</button>
+            </div>
+            <div class="mini-metrics-row">
+              <div>
+                <div class="metric-label">Equity</div>
+                <div class="metric-val" id="replayEquityVal">$25,000.00</div>
+              </div>
+              <div>
+                <div class="metric-label">Realized P&L</div>
+                <div class="metric-val" id="replayRealizedPnLVal">$0.00</div>
+              </div>
+              <div>
+                <div class="metric-label">Win Rate</div>
+                <div class="metric-val" id="replayWinRateVal">0.0%</div>
+              </div>
+            </div>
+
+            <!-- Active Open Positions List -->
+            <div class="active-positions-mini" id="replayActivePositionsList">
+              <div style="color: var(--text-muted); font-size: 11px; padding: 6px 0;">No active positions open.</div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- SCENARIO STUDY GUIDE MODAL -->
+      <div class="scenario-modal" id="scenarioModal" style="display: none;">
+        <div class="modal-backdrop" id="scenarioModalBackdrop"></div>
+        <div class="modal-dialog">
+          <div class="modal-header">
+            <h3 id="scenarioModalTitle">📚 Scenario Playbook</h3>
+            <button class="modal-close-btn" id="scenarioModalCloseBtn">✕</button>
+          </div>
+          <div class="modal-body" id="scenarioModalBody">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- LINE TEXT / LABEL MODAL -->
+      <div class="scenario-modal" id="lineLabelModal" style="display: none;">
+        <div class="modal-backdrop" id="lineLabelModalBackdrop"></div>
+        <div class="modal-dialog" style="max-width: 440px;">
+          <div class="modal-header">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 600; color: #38bdf8;">✏️ Line Label (Centered: ── text ──)</h3>
+            <button class="modal-close-btn" id="closeLineLabelBtn">✕</button>
+          </div>
+          <div class="modal-body">
+            <div style="margin-bottom: 14px;">
+              <label for="lineLabelInput" style="display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">
+                Enter line text (appears centered on line):
+              </label>
+              <input type="text" id="lineLabelInput" class="form-control" style="width: 100%; box-sizing: border-box; padding: 10px 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: 6px; color: #fff; font-size: 13px; font-family: monospace;" placeholder="e.g. PDH, 15m MSS, SSL Swept, FVG CE..." maxlength="40">
+            </div>
+            <div style="margin-bottom: 16px;">
+              <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">Quick ICT Tags:</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;" id="quickLineTagChips">
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="PDH">☀️ PDH</button>
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="PDL">🌙 PDL</button>
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="15m MSS">⚡ 15m MSS</button>
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="5m MSS">⚡ 5m MSS</button>
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="BSL Swept">🟣 BSL Swept</button>
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="SSL Swept">🟣 SSL Swept</button>
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="Midnight Open">🕛 Midnight Open</button>
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="50% Equilibrium">⚖️ 50% EQ</button>
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="Equal Highs (EQH)">EQH</button>
+                <button type="button" class="pill-btn pill-btn-xs line-chip-btn" data-text="Equal Lows (EQL)">EQL</button>
+              </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 14px;">
+              <button type="button" id="clearLineLabelBtn" class="pill-btn" style="color: #ef4444; border-color: rgba(239,68,68,0.3);">Clear Text</button>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" id="cancelLineLabelBtn" class="pill-btn">Cancel</button>
+                <button type="button" id="saveLineLabelBtn" class="pill-btn active" style="background: var(--accent-cyan); color: #000; font-weight: bold;">Apply (Enter)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================================== -->
+    <!-- 2. PB TRADES "ICT FOR DUMMIES" ACADEMY TAB -->
+    <!-- ===================================================================== -->
+    <section id="pbAcademyTab" class="tab-view">
+      <div class="academy-layout">
+        <!-- Sidebar Navigation of Modules -->
+        <div class="academy-sidebar" id="pbAcademyModuleNav"></div>
+
+        <!-- Academy Module Content View -->
+        <div class="academy-content">
+          <div class="academy-hero-banner">
+            <h2>🎓 PB Trades "ICT for Dummies" Masterclass</h2>
+            <p>Master institutional algorithmic order flow, daily bias, intermarket SMT divergence, dealing ranges, and prop-firm risk preservation with PB Trades' complete 12-module masterclass.</p>
+          </div>
+
+          <div id="pbAcademyModuleContent"></div>
+
+          <!-- Interactive Quiz Section -->
+          <div class="quiz-container" id="pbQuizSection" style="margin-top: 30px;">
+            <div class="sidebar-title" style="margin-bottom: 16px;">🧠 Interactive Setup Check & Exam</div>
+            <div id="pbQuizContent"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ===================================================================== -->
+    <!-- 3. LIVE ICT SCANNER TAB -->
+    <!-- ===================================================================== -->
+    <section id="scannerTab" class="tab-view">
       <div class="scanner-quick-status-bar" id="ictQuickStatusBar">
         <div style="font-size: 11px; color: var(--text-muted); padding: 6px 12px;">Loading Symbol Status...</div>
       </div>
@@ -122,7 +463,7 @@
         </div>
       </div>
 
-      <!-- RECENT ALERTS FEED -->
+      <!-- ALERTS FEED -->
       <div class="alerts-feed-section">
         <div class="alerts-header">
           <span>📡</span>
@@ -155,9 +496,11 @@
       </div>
     </section>
 
-    <!-- 2. LIVE ICC (TRADES BY SCI) TAB -->
+
+    <!-- ===================================================================== -->
+    <!-- 4. LIVE ICC RADAR TAB -->
+    <!-- ===================================================================== -->
     <section id="iccTab" class="tab-view">
-      <!-- QUICK SYMBOL STATUS STRIP (FRONT OF LINE JUMPER) -->
       <div class="scanner-quick-status-bar" id="iccQuickStatusBar">
         <div style="font-size: 11px; color: var(--text-muted); padding: 6px 12px;">Loading Symbol Status...</div>
       </div>
@@ -166,7 +509,7 @@
         <div class="icc-hero-header">
           <div>
             <h2>🔬 Pure ICC Strategy Radar</h2>
-            <p>Trades by Sci: <strong>Indication</strong> (Impulse Breakout) ➔ <strong>Correction</strong> (38.2%–61.8% Retracement) ➔ <strong>Continuation</strong> (Trigger Confirmation)</p>
+            <p>Trades by Sci: <strong>Indication</strong> ➔ <strong>Correction</strong> ➔ <strong>Continuation</strong></p>
           </div>
           <div class="icc-phase-pill-box">
             <span class="icc-phase-step">1. Indication</span>
@@ -185,7 +528,10 @@
       </div>
     </section>
 
-    <!-- 3. INTERACTIVE ICT CHART TERMINAL TAB -->
+
+    <!-- ===================================================================== -->
+    <!-- 5. LIVE CHART TAB -->
+    <!-- ===================================================================== -->
     <section id="chartTab" class="tab-view">
       <div class="chart-layout">
         <div class="chart-main-box">
@@ -206,32 +552,20 @@
 
               <div class="pill-group" id="chartSourcePills">
                 <button class="pill-btn active" data-source="tv">🔴 Live TradingView</button>
-                <button class="pill-btn" data-source="radar">⚡ ICT / ICC Smart Radar</button>
+                <button class="pill-btn" data-source="radar">⚡ ICT Smart Radar</button>
               </div>
-            </div>
-
-            <!-- Overlay Toggles (Shown when Radar view active) -->
-            <div class="overlay-toggles" id="radarOverlayToggles" style="display: none;">
-              <span class="toggle-chip active" data-overlay="fvg" id="toggleFvg">🟩 FVG</span>
-              <span class="toggle-chip active" data-overlay="mss" id="toggleMss">⚡ MSS</span>
-              <span class="toggle-chip active" data-overlay="sweeps" id="toggleSweeps">🟣 Sweeps</span>
-              <span class="toggle-chip active" data-overlay="ob" id="toggleOb">🟦 OB</span>
-              <span class="toggle-chip active" data-overlay="ote" id="toggleOte">📏 OTE</span>
             </div>
           </div>
 
-          <!-- TradingView Real-Time Chart Container (Default) -->
           <div class="canvas-wrapper" id="tvChartWrapper">
             <div id="tv_chart_container" style="width: 100%; height: 100%;"></div>
           </div>
 
-          <!-- Canvas (For ICT/ICC Smart Radar Mode) -->
           <div class="canvas-wrapper" id="ictCanvasWrapper" style="display: none;">
             <canvas id="ictChart"></canvas>
           </div>
         </div>
 
-        <!-- Sidebar -->
         <div class="chart-sidebar">
           <div>
             <div class="sidebar-title">🎯 Optimal Trade Entry (OTE)</div>
@@ -249,101 +583,158 @@
               <div>Scanning chart structure...</div>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
 
-          <div style="margin-top: auto;">
-            <button class="btn btn-success" id="chartQuickTradeBtn" style="width: 100%;">
-              🚀 Quick Paper Trade
+
+    <!-- ===================================================================== -->
+    <!-- 7. MARKUP TEST / PRACTICE EXAM TAB -->
+    <!-- ===================================================================== -->
+    <section id="markupTestTab" class="tab-view">
+      <div class="markup-test-top-strip">
+        <div class="markup-test-header">
+          <h2 style="margin: 0; font-size: 16px; color: var(--accent-cyan);">🎯 Markup & Trade Test</h2>
+          <span style="font-size: 11px; color: var(--text-muted);">Mark up the chart using ICT concepts. When you're done, reveal the answer to compare.</span>
+        </div>
+
+        <div class="markup-test-controls">
+          <div class="scenario-selector-box">
+            <label for="markupChallengeSelect" style="font-size: 11px; font-weight: 700; color: var(--accent-cyan);">📚 CHALLENGE:</label>
+            <select id="markupChallengeSelect" class="scenario-dropdown">
+              <!-- Populated via JS -->
+            </select>
+          </div>
+
+          <div class="pill-group" id="markupTfPills">
+            <button class="pill-btn" data-tf="1m">1m</button>
+            <button class="pill-btn active" data-tf="5m">5m</button>
+            <button class="pill-btn" data-tf="15m">15m</button>
+            <button class="pill-btn" data-tf="30m">30m</button>
+            <button class="pill-btn" data-tf="1h">1h</button>
+          </div>
+
+          <div class="answer-toggle-group">
+            <button class="pill-btn auto-markup-toggle-btn active" id="markupSessionsToggleBtn" title="Toggle Multi-Session Markouts (Asia High/Low, London High/Low, Midnight Open, PDH/PDL) ON/OFF">
+              🕒 Sessions: <span class="status-text">ON</span>
+            </button>
+            <button class="pill-btn auto-markup-toggle-btn" id="markupAutoMarkupToggleBtn" title="Toggle Auto-Detected ICT FVGs ON/OFF to compare with your own">
+              ⚡ Auto FVGs: <span class="status-text">OFF</span>
+            </button>
+            <button class="btn btn-secondary" id="markupClearBtn" title="Clear your markup">🗑️ Clear My Markup</button>
+            <button class="btn btn-primary answer-reveal-btn" id="markupRevealBtn" title="Toggle to reveal the correct answer overlay">
+              👁️ Reveal Answer
             </button>
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- 3. ICT ACADEMY TAB -->
-    <section id="academyTab" class="tab-view">
-      <div class="academy-layout">
-        <div class="academy-sidebar" id="academyModuleNav"></div>
-        <div class="academy-content">
-          <div id="academyModuleContent"></div>
-          <div class="quiz-container" id="quizSection">
-            <div class="sidebar-title" style="margin-bottom: 16px;">🧠 Interactive Setup Check</div>
-            <div id="quizContent"></div>
+      <div class="markup-test-workspace">
+        <!-- Drawing Toolbar (same tools as replay) -->
+        <div class="tv-drawing-toolbar" id="markupDrawingToolbar">
+          <button class="tool-btn active" data-tool="pointer" title="Select & Pan">↖️</button>
+          <button class="tool-btn" data-tool="fvg" title="Draw FVG Box">🟩 FVG</button>
+          <button class="tool-btn" data-tool="liquidity" title="BSL / SSL Liquidity Ray">🟣 Liq</button>
+          <button class="tool-btn" data-tool="ote" title="ICT OTE Fibonacci">📏 OTE</button>
+          <button class="tool-btn" data-tool="long_pos" title="Long Position R:R">🟢 Long</button>
+          <button class="tool-btn" data-tool="short_pos" title="Short Position R:R">🔴 Short</button>
+          <button class="tool-btn" data-tool="trendline" title="Trendline / Ray">📈 Line</button>
+          <button class="tool-btn" data-tool="toggle_automarkup" id="markupToolAutoMarkupBtn" title="Toggle Auto ICT Markups (FVGs, Liquidity, Sessions) ON/OFF">⚡ Auto</button>
+          <button class="tool-btn" data-tool="brush" title="Pencil / Freehand">✏️ Pen</button>
+          <button class="tool-btn" data-tool="zoom_in" id="markupToolZoomInBtn" title="Zoom In (+)">🔍+</button>
+          <button class="tool-btn" data-tool="zoom_out" id="markupToolZoomOutBtn" title="Zoom Out (-)">🔍−</button>
+          <button class="tool-btn" data-tool="zoom_reset" id="markupToolZoomResetBtn" title="Reset View (0)">↺</button>
+          <button class="tool-btn" data-tool="undo" title="Undo Last Drawing">↩️</button>
+          <button class="tool-btn" data-tool="clear" title="Clear All">🗑️</button>
+        </div>
+
+        <!-- Challenge Chart Canvas -->
+        <div class="markup-chart-area">
+          <div class="canvas-wrapper chart-pane">
+            <div class="chart-pane-header">
+              <div class="pane-symbol-tag" id="markupPaneTag">🎯 MARKUP TEST: MNQ • 5m</div>
+              <div class="pane-status-pill" id="markupPaneStatus">Mark up, then reveal answer</div>
+            </div>
+            <canvas id="markupTestCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Challenge Info Sidebar -->
+        <div class="markup-test-sidebar">
+          <div class="card">
+            <h3 style="margin: 0 0 8px 0; font-size: 13px; color: var(--accent-cyan);">📋 Challenge Task</h3>
+            <div id="markupChallengeDescription" style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+              Select a challenge to begin. Study the price action and markup all ICT concepts you can identify.
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="margin: 0 0 8px 0; font-size: 13px; color: #f59e0b;">🎯 What to Identify</h3>
+            <ul id="markupObjectivesList" style="font-size: 11px; color: var(--text-muted); padding-left: 16px; margin: 0; line-height: 1.8;">
+              <li>Fair Value Gaps (FVGs)</li>
+              <li>Liquidity Sweeps (BSL / SSL)</li>
+              <li>Market Structure Shifts (MSS)</li>
+              <li>Optimal Trade Entry (OTE Zone)</li>
+              <li>Entry, Stop Loss, Take Profit</li>
+            </ul>
+          </div>
+          <div class="card" id="markupScoreCard" style="display: none;">
+            <h3 style="margin: 0 0 8px 0; font-size: 13px; color: #10b981;">✅ Answer Revealed</h3>
+            <div id="markupAnswerNotes" style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+              Compare your markup with the answer overlay shown in gold/cyan on the chart.
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- 4. PAPER TRADING TAB -->
+
+    <!-- ===================================================================== -->
+    <!-- 6. BACKTEST JOURNAL & PERFORMANCE TAB -->
+    <!-- ===================================================================== -->
     <section id="paperTab" class="tab-view">
       <div class="paper-overview-grid">
         <div class="metric-card">
-          <div class="metric-title">Simulated Balance</div>
+          <div class="metric-title">Backtest Balance</div>
           <div class="metric-value" id="paperBalanceDisplay">$25,000.00</div>
         </div>
         <div class="metric-card">
-          <div class="metric-title">Unrealized P&L</div>
+          <div class="metric-title">Realized P&L</div>
           <div class="metric-value" id="paperUnrealizedDisplay">$0.00</div>
         </div>
         <div class="metric-card">
-          <div class="metric-title">Open Positions</div>
-          <div class="metric-value" id="paperOpenPosCount">0</div>
+          <div class="metric-title">Win Rate</div>
+          <div class="metric-value" id="paperWinRateDisplay">0.0%</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Profit Factor</div>
+          <div class="metric-value" id="paperProfitFactorDisplay">0.00</div>
         </div>
       </div>
 
       <div class="positions-card">
         <div class="positions-header">
-          <h3>Active Simulated Positions</h3>
-          <button class="btn btn-secondary" id="resetPaperAccountBtn" style="font-size: 11px;">🔄 Reset</button>
+          <h3>Completed Backtest Trades Journal</h3>
+          <button class="btn btn-secondary" id="resetPaperAccountBtn" style="font-size: 11px;">🔄 Reset Journal</button>
         </div>
         <div class="table-responsive">
           <table class="pos-table">
             <thead>
               <tr>
                 <th>Time</th>
-                <th>Symbol</th>
-                <th>Bias</th>
-                <th>Size</th>
-                <th>Entry</th>
-                <th>Current</th>
-                <th>SL</th>
-                <th>TP</th>
-                <th>P&L (Pts)</th>
-                <th>P&L ($)</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="openPositionsTbody">
-              <tr>
-                <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                  No active positions.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="positions-card">
-        <div class="positions-header">
-          <h3>Closed Trades Journal</h3>
-        </div>
-        <div class="table-responsive">
-          <table class="pos-table">
-            <thead>
-              <tr>
-                <th>Closed</th>
-                <th>Symbol</th>
-                <th>Bias</th>
+                <th>Scenario</th>
+                <th>Side</th>
                 <th>Model</th>
                 <th>Entry</th>
-                <th>Close</th>
+                <th>Exit</th>
+                <th>Points</th>
                 <th>P&L ($)</th>
+                <th>Result</th>
               </tr>
             </thead>
-            <tbody id="closedPositionsTbody">
+            <tbody id="backtestJournalTbody">
               <tr>
-                <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                  No closed trades yet.
+                <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                  No backtested trades yet. Use the Replay Backtest tab to execute trades on historical candles.
                 </td>
               </tr>
             </tbody>
@@ -356,8 +747,12 @@
 
   <div class="toast-notification" id="toastBox">Notification</div>
 
-  <script src="academy_data.js?v=5.3"></script>
-  <script src="engine.js?v=5.3"></script>
-  <script src="app.js?v=5.3"></script>
+  <!-- LOAD SCRIPTS IN ORDER -->
+  <script src="pb_academy_data.js?v=9.6"></script>
+  <script src="academy_data.js?v=9.6"></script>
+  <script src="replay_scenarios_data.js?v=9.6"></script>
+  <script src="engine.js?v=9.6"></script>
+  <script src="replay_engine.js?v=9.6"></script>
+  <script src="app.js?v=9.6"></script>
 </body>
 </html>

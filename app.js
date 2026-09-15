@@ -77,6 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupNavigation();
   setupChartControls();
   setupAudioToggle();
+  initReplayBacktester();
+  initMarkupTestTab();
+  initPbTradesAcademy();
   renderAcademyNav();
   renderAcademyContent(STATE.currentModuleId);
   fetchStatus();
@@ -147,9 +150,22 @@ function setupNavigation() {
       btn.classList.add('active');
 
       document.querySelectorAll('.tab-view').forEach(view => view.classList.remove('active'));
-      document.getElementById(tabId).classList.add('active');
+      const targetView = document.getElementById(tabId);
+      if (targetView) targetView.classList.add('active');
       STATE.activeTab = tabId;
 
+      if (tabId === 'replayTab' && window.replayEngine) {
+        setTimeout(() => {
+          window.replayEngine.resize();
+          window.replayEngine.render();
+        }, 50);
+      }
+      if (tabId === 'markupTestTab' && window.markupTestEngine) {
+        setTimeout(() => {
+          window.markupTestEngine.resize();
+          window.markupTestEngine.render();
+        }, 50);
+      }
       if (tabId === 'chartTab') {
         if (STATE.chartSource === 'tv') {
           setTimeout(() => renderTradingViewChart(STATE.activeSymbol, STATE.activeTimeframe), 50);
@@ -159,6 +175,9 @@ function setupNavigation() {
       }
       if (tabId === 'iccTab') {
         fetchIccScan();
+      }
+      if (tabId === 'paperTab') {
+        updateBacktestJournalUI();
       }
     });
   });
@@ -1945,4 +1964,1673 @@ async function resetPaperAccount() {
       console.error("Reset error", e);
     }
   }
+}
+
+// ============================================================================
+// 7. REPLAY FX-STYLE BACKTESTER CONTROLLER & DRAWING PALETTE
+// ============================================================================
+function initReplayBacktester() {
+  const canvasEl = document.getElementById('replayCanvas');
+  if (!canvasEl || !window.ReplayEngine) return;
+
+  const engine = new window.ReplayEngine();
+  window.replayEngine = engine;
+
+  // 1. Populate Scenario Selector Dropdown
+  const scenarioSelect = document.getElementById('replayScenarioSelect');
+  function updateScenarioDropdown() {
+    if (scenarioSelect && window.REPLAY_SCENARIOS) {
+      scenarioSelect.innerHTML = window.REPLAY_SCENARIOS.list.map(s => `
+        <option value="${s.id}">${s.name} (${s.symbol})</option>
+      `).join('');
+    }
+  }
+  updateScenarioDropdown();
+
+  if (scenarioSelect) {
+    scenarioSelect.addEventListener('change', (e) => {
+      engine.loadScenario(e.target.value);
+      showToast(`Loaded Scenario: ${engine.scenario.name}`);
+    });
+  }
+
+  // Fetch actual live exchange candles for MNQ, MES, and MGC
+  async function loadLiveExchangeScenarios() {
+    try {
+      const symbols = ['MNQ', 'MES', 'MGC'];
+      for (const sym of symbols) {
+        const res = await fetch(`/api/replay/live-data?symbol=${sym}&days=5`);
+        const data = await res.json();
+        if (data && data.candles_1m && data.candles_1m.length > 60) {
+          const liveId = `live-${sym.toLowerCase()}-recent`;
+          const exists = window.REPLAY_SCENARIOS.list.find(s => s.id === liveId);
+          const liveScenario = {
+            id: liveId,
+            name: `🔴 Real Live Market: ${sym} Recent Multi-Day Session (${data.candles_1m.length} 1m Bars)`,
+            symbol: sym,
+            dateStr: "Recent Live Exchange Trading Days",
+            category: "Actual Live Market Feed",
+            difficulty: "Real Live Order Flow",
+            description: `100% genuine tick-for-tick exchange candles directly from the live futures market (${sym}). Backtest recent price action bar-by-bar across 1m, 5m, 15m, 30m, 1h, 4h, and Daily timeframes.`,
+            learningGoals: [
+              "Read authentic institutional order flow without any synthetic smoothing",
+              "Identify real-time Fair Value Gaps and Liquidity Raids on live futures data",
+              "Execute PB Trades execution model under realistic live market conditions"
+            ],
+            startPrice: data.candles_1m[0].open,
+            startTime: data.candles_1m[0].time,
+            durationMinutes: data.candles_1m.length,
+            volatility: sym === 'MNQ' ? 6.5 : (sym === 'MES' ? 2.5 : 1.5),
+            patternType: "live_exchange",
+            raw1m: data.candles_1m,
+            suggestedPlaybook: {
+              bias: "Dynamic Live Delivery",
+              entryWindow: "Killzone Windows (02:00-05:00 / 10:00-11:00 NY)",
+              expectedSetup: "PB Trades 5-Point Setup Confirmation",
+              invalidation: "Beyond structural swing high/low",
+              target: "Opposing BSL/SSL pool"
+            }
+          };
+
+          if (exists) {
+            Object.assign(exists, liveScenario);
+          } else {
+            window.REPLAY_SCENARIOS.list.push(liveScenario);
+          }
+        }
+      }
+      updateScenarioDropdown();
+    } catch (e) {
+      console.log("Live exchange scenario fetch:", e);
+    }
+  }
+  loadLiveExchangeScenarios();
+
+  // 2. Initialize Primary and Secondary Canvas
+  const firstRealScenarioId = window.REPLAY_SCENARIOS && window.REPLAY_SCENARIOS.list.length > 0 ? window.REPLAY_SCENARIOS.list[0].id : null;
+  engine.init(canvasEl, scenarioSelect && scenarioSelect.value ? scenarioSelect.value : firstRealScenarioId);
+
+  const secCanvas = document.getElementById('replaySecondaryCanvas');
+  if (secCanvas) {
+    engine.initSecondary(secCanvas);
+  }
+
+  // 2b. Dual-Chart Layout Mode Pills (Single, Dual Side-by-Side SMT, Stacked)
+  const layoutPills = document.querySelectorAll('#replayLayoutPills .pill-btn');
+  layoutPills.forEach(btn => {
+    btn.addEventListener('click', () => {
+      layoutPills.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const layoutMode = btn.getAttribute('data-layout');
+      engine.setLayoutMode(layoutMode);
+      showToast(`Switched layout to ${layoutMode === 'dual' ? 'Side-by-Side (SMT Mode)' : (layoutMode === 'stacked' ? 'Stacked View' : 'Single Chart')}`);
+    });
+  });
+
+  // 2c. Secondary SMT Symbol & Timeframe Controls
+  const smtSymbolSelect = document.getElementById('smtSecondarySymbolSelect');
+  if (smtSymbolSelect) {
+    smtSymbolSelect.addEventListener('change', (e) => {
+      engine.setSecondarySymbol(e.target.value);
+      showToast(`SMT Comparison asset set to ${e.target.value}`);
+    });
+  }
+
+  const smtTfPills = document.querySelectorAll('#smtSecondaryTfPills .pill-btn');
+  smtTfPills.forEach(btn => {
+    btn.addEventListener('click', () => {
+      smtTfPills.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tf = btn.getAttribute('data-tf');
+      engine.setSecondaryTimeframe(tf);
+    });
+  });
+
+  // 3. Timeframe Buttons (Primary)
+  const tfPills = document.querySelectorAll('#replayTfPills .pill-btn');
+  tfPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      tfPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      const tf = pill.getAttribute('data-tf');
+      engine.setTimeframe(tf);
+    });
+  });
+
+  // 3b. Session Markouts & Auto-Markup Toggle Buttons (Top Strip + Toolbar)
+  const replaySessionsBtn = document.getElementById('replaySessionsToggleBtn');
+  const replayAutoMarkupBtn = document.getElementById('replayAutoMarkupToggleBtn');
+  const toolAutoMarkupBtn = document.getElementById('toolAutoMarkupBtn');
+
+  function updateSessionsUI(isActive) {
+    if (replaySessionsBtn) {
+      replaySessionsBtn.classList.toggle('active', isActive);
+      const txt = replaySessionsBtn.querySelector('.status-text');
+      if (txt) txt.textContent = isActive ? 'ON' : 'OFF';
+    }
+  }
+
+  function updateAutoMarkupUI(isActive) {
+    if (replayAutoMarkupBtn) {
+      replayAutoMarkupBtn.classList.toggle('active', isActive);
+      const txt = replayAutoMarkupBtn.querySelector('.status-text');
+      if (txt) txt.textContent = isActive ? 'ON' : 'OFF';
+    }
+    if (toolAutoMarkupBtn) {
+      toolAutoMarkupBtn.classList.toggle('active', isActive);
+    }
+  }
+
+  if (replaySessionsBtn) {
+    replaySessionsBtn.addEventListener('click', () => {
+      const active = engine.toggleSessions();
+      updateSessionsUI(active);
+      showToast(active ? "🕒 Multi-Session Markouts: ON (Asia H/L, London H/L, Midnight Open, PDH/PDL)" : "🕒 Multi-Session Markouts: OFF");
+    });
+  }
+
+  if (replayAutoMarkupBtn) {
+    replayAutoMarkupBtn.addEventListener('click', () => {
+      const active = engine.toggleAutoMarkup();
+      updateAutoMarkupUI(active);
+      showToast(active ? "⚡ Auto ICT Markups: ON (FVGs & Sweeps)" : "⚡ Auto ICT Markups: OFF (Clean Chart)");
+    });
+  }
+
+  if (toolAutoMarkupBtn) {
+    toolAutoMarkupBtn.addEventListener('click', () => {
+      const active = engine.toggleAutoMarkup();
+      updateAutoMarkupUI(active);
+      showToast(active ? "⚡ Auto ICT Markups: ON (FVGs & Sweeps)" : "⚡ Auto ICT Markups: OFF (Clean Chart)");
+    });
+  }
+
+  // 4. Drawing Tool Buttons
+  const toolBtns = document.querySelectorAll('#tvDrawingToolbar .tool-btn');
+  toolBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tool = btn.getAttribute('data-tool');
+      if (tool === 'toggle_automarkup') {
+        const active = engine.toggleAutoMarkup();
+        updateAutoMarkupUI(active);
+        showToast(active ? "🧠 Auto ICT Markups: ON" : "🧠 Auto ICT Markups: OFF (Clean Chart)");
+        return;
+      }
+      if (tool === 'undo') {
+        engine.undo();
+        return;
+      }
+      if (tool === 'cut') {
+        engine.cutMode = !engine.cutMode;
+        btn.classList.toggle('active', engine.cutMode);
+        showToast(engine.cutMode ? "✂️ Click any candle on chart to start replay from there" : "Scissors mode deactivated");
+        return;
+      }
+      if (tool === 'zoom_in') {
+        engine.zoomIn();
+        return;
+      }
+      if (tool === 'zoom_out') {
+        engine.zoomOut();
+        return;
+      }
+      if (tool === 'zoom_reset') {
+        engine.resetZoom();
+        showToast("↺ View reset to default 55 bars auto-fit");
+        return;
+      }
+      if (tool === 'clear') {
+        engine.setTool('clear');
+        toolBtns.forEach(b => b.classList.remove('active'));
+        const pointerBtn = document.querySelector('#tvDrawingToolbar [data-tool="pointer"]');
+        if (pointerBtn) pointerBtn.classList.add('active');
+        return;
+      }
+
+      toolBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      engine.setTool(tool);
+    });
+  });
+
+  // 5. Replay Player Controls
+  const playPauseBtn = document.getElementById('replayPlayPauseBtn');
+  if (playPauseBtn) {
+    playPauseBtn.addEventListener('click', () => engine.togglePlay());
+  }
+
+  const stepBackBtn = document.getElementById('replayStepBackBtn');
+  if (stepBackBtn) {
+    stepBackBtn.addEventListener('click', () => engine.stepBackward(1));
+  }
+
+  const stepForwardBtn = document.getElementById('replayStepForwardBtn');
+  if (stepForwardBtn) {
+    stepForwardBtn.addEventListener('click', () => engine.stepForward(1));
+  }
+
+  const jumpStartBtn = document.getElementById('replayJumpStartBtn');
+  if (jumpStartBtn) {
+    jumpStartBtn.addEventListener('click', () => engine.jumpToStart());
+  }
+
+  const jumpEndBtn = document.getElementById('replayJumpEndBtn');
+  if (jumpEndBtn) {
+    jumpEndBtn.addEventListener('click', () => engine.jumpToEnd());
+  }
+
+  // Speed Selector Chips
+  document.querySelectorAll('.speed-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.speed-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const speed = parseFloat(chip.getAttribute('data-speed'));
+      engine.setSpeed(speed);
+    });
+  });
+
+  // Replay Scrubber
+  const scrubber = document.getElementById('replayScrubber');
+  if (scrubber) {
+    scrubber.addEventListener('input', (e) => {
+      const frac = parseFloat(e.target.value) / 100.0;
+      engine.seekFraction(frac);
+    });
+  }
+
+  // 6. Keyboard Shortcuts (Spacebar, Arrows, B/S)
+  window.addEventListener('keydown', (e) => {
+    if (STATE.activeTab !== 'replayTab') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+    if (e.code === 'Space') {
+      e.preventDefault();
+      engine.togglePlay();
+    } else if (e.code === 'ArrowRight') {
+      e.preventDefault();
+      engine.stepForward(1);
+    } else if (e.code === 'ArrowLeft') {
+      e.preventDefault();
+      engine.stepBackward(1);
+    } else if (e.code === 'KeyB') {
+      e.preventDefault();
+      executeReplayOrder('BUY');
+    } else if (e.code === 'KeyS') {
+      e.preventDefault();
+      executeReplayOrder('SELL');
+    } else if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      engine.zoomIn();
+    } else if (e.key === '-' || e.key === '_') {
+      e.preventDefault();
+      engine.zoomOut();
+    } else if (e.key === '0') {
+      e.preventDefault();
+      engine.resetZoom();
+      showToast("↺ View reset to default 55 bars auto-fit");
+    }
+  });
+
+  // 7. Order Execution Controls
+  let activeOrderType = 'MARKET';
+  document.querySelectorAll('.order-type-toggle .toggle-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.order-type-toggle .toggle-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeOrderType = pill.getAttribute('data-ordertype');
+      const limitGroup = document.getElementById('limitPriceGroup');
+      if (limitGroup) {
+        limitGroup.style.display = activeOrderType === 'LIMIT' ? 'block' : 'none';
+        if (activeOrderType === 'LIMIT') {
+          const curPrice = engine.getCurrentPrice();
+          document.getElementById('orderLimitPriceInput').value = curPrice.toFixed(2);
+        }
+      }
+    });
+  });
+
+  function executeReplayOrder(side) {
+    const size = parseInt(document.getElementById('orderSizeInput').value, 10) || 1;
+    const limitPrice = activeOrderType === 'LIMIT' ? parseFloat(document.getElementById('orderLimitPriceInput').value) : null;
+    const sl = parseFloat(document.getElementById('orderSlInput').value) || null;
+    const tp = parseFloat(document.getElementById('orderTpInput').value) || null;
+
+    engine.placeOrder({
+      type: activeOrderType,
+      side: side,
+      size: size,
+      price: limitPrice,
+      sl: sl,
+      tp: tp,
+      model: "PB Trades Model"
+    });
+  }
+
+  const buyBtn = document.getElementById('replayBuyBtn');
+  if (buyBtn) buyBtn.addEventListener('click', () => executeReplayOrder('BUY'));
+
+  const sellBtn = document.getElementById('replaySellBtn');
+  if (sellBtn) sellBtn.addEventListener('click', () => executeReplayOrder('SELL'));
+
+  // Sync Long/Short Position tool bracket from chart to order inputs
+  const applyBracketBtn = document.getElementById('applyBracketToOrderBtn');
+  if (applyBracketBtn) {
+    applyBracketBtn.addEventListener('click', () => {
+      const posShape = [...engine.drawings].reverse().find(s => s.type === 'long_pos' || s.type === 'short_pos');
+      if (posShape) {
+        const isLong = posShape.type === 'long_pos';
+        const entryPrice = posShape.entryPrice || posShape.startPrice;
+        const tpPrice = posShape.tpPrice;
+        const slPrice = posShape.slPrice;
+
+        const slInput = document.getElementById('orderSlInput');
+        const tpInput = document.getElementById('orderTpInput');
+        const limitInput = document.getElementById('orderLimitPriceInput');
+
+        if (slInput) slInput.value = slPrice ? slPrice.toFixed(2) : '';
+        if (tpInput) tpInput.value = tpPrice ? tpPrice.toFixed(2) : '';
+        if (limitInput) limitInput.value = entryPrice.toFixed(2);
+
+        showToast(`🎯 Applied Chart ${isLong ? 'Long' : 'Short'} Bracket (Entry: ${entryPrice.toFixed(2)} | SL: ${slPrice.toFixed(2)} | TP: ${tpPrice.toFixed(2)})`);
+      } else {
+        showToast("ℹ️ Draw a Long (🟢 Long) or Short (🔴 Short) position tool on the chart first!");
+      }
+    });
+  }
+
+  const resetAcctBtn = document.getElementById('replayResetAccountBtn');
+  if (resetAcctBtn) {
+    resetAcctBtn.addEventListener('click', () => {
+      if (confirm("Reset Replay Account balance to $25,000.00?")) {
+        engine.resetAccount();
+        engine.render();
+        engine.notifyState();
+        showToast("Replay account reset to $25,000.00");
+      }
+    });
+  }
+
+  // 8. PB Trades 5-Point Checklist Widget
+  renderPbChecklistWidget();
+
+  // 9. Scenario Info Modal
+  setupScenarioModal(engine);
+
+  // 10. Engine State Change & Trade Event Hooks
+  engine.onStateChange = (state) => {
+    // Update play button text & class
+    if (playPauseBtn) {
+      playPauseBtn.textContent = state.isPlaying ? '⏸ Pause' : '▶ Play';
+      playPauseBtn.classList.toggle('playing', state.isPlaying);
+    }
+
+    // Sync Auto Markup Toggle UI
+    if (state.autoMarkup !== undefined) {
+      updateAutoMarkupUI(state.autoMarkup);
+    }
+    if (state.sessions !== undefined) {
+      updateSessionsUI(state.sessions);
+    }
+
+    // Update Price Badge
+    const priceBadge = document.getElementById('replayCurrentPriceBadge');
+    if (priceBadge) {
+      priceBadge.textContent = state.currentPrice ? state.currentPrice.toFixed(2) : '--';
+    }
+
+    // Update Time Readout
+    const timeReadout = document.getElementById('replayTimeReadout');
+    if (timeReadout && state.currentTime) {
+      const ny = window.ICTEngine.getNyTime(state.currentTime);
+      timeReadout.textContent = `${ny.hour.toString().padStart(2, '0')}:${ny.minute.toString().padStart(2, '0')} NY`;
+    }
+
+    // Update Scrubber
+    if (scrubber && state.total1mBars > 0) {
+      scrubber.value = Math.round((state.current1mIndex / (state.total1mBars - 1)) * 100);
+    }
+
+    // Update Multi-Session Context Table
+    if (state.context) {
+      const c = state.context;
+      const elMidnight = document.getElementById('ctxMidnightOpen');
+      const elAsiaH = document.getElementById('ctxAsiaHigh');
+      const elAsiaL = document.getElementById('ctxAsiaLow');
+      const elLonH = document.getElementById('ctxLondonHigh');
+      const elLonL = document.getElementById('ctxLondonLow');
+      const elPdh = document.getElementById('ctxPdh');
+      const elPdl = document.getElementById('ctxPdl');
+      const biasBadge = document.getElementById('sessionBiasBadge');
+
+      if (elMidnight) elMidnight.textContent = c.midnightOpen ? c.midnightOpen.toFixed(2) : '--';
+      if (elAsiaH) elAsiaH.textContent = c.asia.high ? `${c.asia.high.toFixed(2)} (${(c.asia.high - c.asia.low).toFixed(1)} pts)` : '--';
+      if (elAsiaL) elAsiaL.textContent = c.asia.low ? c.asia.low.toFixed(2) : '--';
+      if (elLonH) elLonH.textContent = c.london.high ? `${c.london.high.toFixed(2)} (${(c.london.high - c.london.low).toFixed(1)} pts)` : '--';
+      if (elLonL) elLonL.textContent = c.london.low ? c.london.low.toFixed(2) : '--';
+      if (elPdh) elPdh.textContent = c.pdh ? c.pdh.toFixed(2) : '--';
+      if (elPdl) elPdl.textContent = c.pdl ? c.pdl.toFixed(2) : '--';
+
+      if (biasBadge && c.midnightOpen && state.currentPrice) {
+        const isPrem = state.currentPrice > c.midnightOpen;
+        biasBadge.textContent = isPrem ? "Midnight Premium" : "Midnight Discount";
+        biasBadge.className = isPrem ? "badge-tag badge-bearish" : "badge-tag badge-bullish";
+      }
+    }
+
+    // Update Account Equity & Stats
+    const eqEl = document.getElementById('replayEquityVal');
+    const pnlEl = document.getElementById('replayRealizedPnLVal');
+    const winRateEl = document.getElementById('replayWinRateVal');
+
+    if (eqEl) eqEl.textContent = `$${parseFloat(state.stats.equity).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    if (pnlEl) {
+      const pnl = parseFloat(state.stats.totalPnL);
+      pnlEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+      pnlEl.style.color = pnl >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+    }
+    if (winRateEl) winRateEl.textContent = `${state.stats.winRate}% (${state.stats.wins}W / ${state.stats.losses}L)`;
+
+    // Render Active Positions in Mini Sidebar
+    renderReplayActivePositions(state.account.openPositions);
+    updateBacktestJournalUI();
+  };
+
+  engine.onTradeEvent = (event, trade) => {
+    if (event === 'TAKE_PROFIT') {
+      audio.playConfluenceChime();
+      showToast(`🎯 TAKE PROFIT HIT! +$${trade.pnl.toFixed(2)} (+${trade.pts.toFixed(2)} pts)`);
+    } else if (event === 'STOP_LOSS') {
+      showToast(`🛑 STOP LOSS HIT: -$${Math.abs(trade.pnl).toFixed(2)} (${trade.pts.toFixed(2)} pts)`);
+    } else if (event === 'ORDER_FILLED') {
+      audio.playConfluenceChime();
+      showToast(`⚡ Limit Order Filled: ${trade.side} @ ${trade.entryPrice.toFixed(2)}`);
+    } else if (event === 'POSITION_CLOSED') {
+      showToast(`Position Closed: ${trade.pnl >= 0 ? '+' : ''}$${trade.pnl.toFixed(2)}`);
+    }
+  };
+}
+
+function renderReplayActivePositions(positions) {
+  const container = document.getElementById('replayActivePositionsList');
+  if (!container) return;
+
+  if (!positions || positions.length === 0) {
+    container.innerHTML = `<div style="color: var(--text-muted); font-size: 11px; padding: 6px 0;">No active positions open.</div>`;
+    return;
+  }
+
+  container.innerHTML = positions.map(pos => {
+    const isBull = pos.side === 'BUY';
+    const isPos = pos.unrealizedPnL >= 0;
+    return `
+      <div class="pos-mini-card">
+        <div>
+          <div style="font-weight: 700; font-size: 11px; color: ${isBull ? 'var(--bullish)' : 'var(--bearish)'};">
+            ${pos.side} ${pos.size}x @ ${pos.entryPrice.toFixed(2)}
+          </div>
+          <div style="font-size: 10px; color: var(--text-muted);">
+            SL: ${pos.sl || '--'} | TP: ${pos.tp || '--'}
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 800; font-size: 11px; color: ${isPos ? 'var(--bullish)' : 'var(--bearish)'};">
+            ${isPos ? '+' : ''}$${(pos.unrealizedPnL || 0).toFixed(2)}
+          </div>
+          <button class="btn btn-secondary btn-xs" onclick="window.replayEngine.closePosition('${pos.id}')">Close</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderPbChecklistWidget() {
+  const container = document.getElementById('pbChecklistContainer');
+  if (!container || !window.PB_ACADEMY_DATA) return;
+
+  container.innerHTML = window.PB_ACADEMY_DATA.checklist.map(item => `
+    <div class="pb-checklist-item">
+      <input type="checkbox" id="chk_${item.id}" onchange="updatePbChecklistScore()">
+      <div class="pb-checklist-label">
+        <div class="pb-checklist-title">${item.title}</div>
+        <div class="pb-checklist-desc">${item.desc}</div>
+      </div>
+    </div>
+  `).join('');
+  updatePbChecklistScore();
+}
+
+window.updatePbChecklistScore = function() {
+  const checkboxes = document.querySelectorAll('.pb-checklist-item input[type="checkbox"]');
+  let checked = 0;
+  checkboxes.forEach(c => { if (c.checked) checked++; });
+  const scoreBadge = document.getElementById('pbChecklistScore');
+  if (scoreBadge) {
+    scoreBadge.textContent = `${checked} / ${checkboxes.length}`;
+    scoreBadge.style.background = checked >= 4 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(6, 182, 212, 0.15)';
+    scoreBadge.style.color = checked >= 4 ? '#34d399' : '#67e8f9';
+  }
+};
+
+function setupScenarioModal(engine) {
+  const infoBtn = document.getElementById('scenarioInfoBtn');
+  const modal = document.getElementById('scenarioModal');
+  const closeBtn = document.getElementById('scenarioModalCloseBtn');
+  const backdrop = document.getElementById('scenarioModalBackdrop');
+  const titleEl = document.getElementById('scenarioModalTitle');
+  const bodyEl = document.getElementById('scenarioModalBody');
+
+  function openModal() {
+    const sc = engine.scenario;
+    if (!sc) return;
+
+    titleEl.textContent = `📚 ${sc.name}`;
+    bodyEl.innerHTML = `
+      <div style="margin-bottom: 14px;">
+        <span class="step-tag">${sc.category}</span>
+        <span style="font-size: 11px; color: var(--text-muted); margin-left: 8px;">Difficulty: <strong>${sc.difficulty}</strong></span>
+        <div style="font-size: 12px; color: #60a5fa; margin-top: 4px;">📅 ${sc.dateStr}</div>
+      </div>
+
+      <p style="font-size: 13px; line-height: 1.5; color: #e5e7eb; margin-bottom: 16px;">${sc.description}</p>
+
+      <div class="sidebar-card" style="margin-bottom: 16px;">
+        <h4 style="font-size: 12px; color: var(--accent-cyan); margin-bottom: 8px;">🎯 Suggested PB Trades Playbook:</h4>
+        <div style="font-size: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+          <div>Bias: <strong>${sc.suggestedPlaybook.bias}</strong></div>
+          <div>Window: <strong>${sc.suggestedPlaybook.entryWindow}</strong></div>
+          <div>Setup: <strong>${sc.suggestedPlaybook.expectedSetup}</strong></div>
+          <div>Target: <strong>${sc.suggestedPlaybook.target}</strong></div>
+        </div>
+      </div>
+
+      <h4 style="font-size: 12px; color: #fff; margin-bottom: 8px;">📝 Key Practice Objectives:</h4>
+      <ul style="font-size: 12px; color: var(--text-muted); padding-left: 18px; line-height: 1.6;">
+        ${sc.learningGoals.map(g => `<li>${g}</li>`).join('')}
+      </ul>
+    `;
+    modal.style.display = 'flex';
+  }
+
+  function closeModal() {
+    modal.style.display = 'none';
+  }
+
+  if (infoBtn) infoBtn.addEventListener('click', openModal);
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (backdrop) backdrop.addEventListener('click', closeModal);
+}
+
+// ============================================================================
+// 7b. LINE TEXT / LABEL MODAL CONTROLLER (Centered ---text--- on lines)
+// ============================================================================
+let activeLineShapeForLabel = null;
+let activeLineLabelSaveCallback = null;
+
+window.openLineLabelModal = function(shape, onSave) {
+  const modal = document.getElementById('lineLabelModal');
+  const input = document.getElementById('lineLabelInput');
+  const backdrop = document.getElementById('lineLabelModalBackdrop');
+  const closeBtn = document.getElementById('closeLineLabelBtn');
+  const cancelBtn = document.getElementById('cancelLineLabelBtn');
+  const saveBtn = document.getElementById('saveLineLabelBtn');
+  const clearBtn = document.getElementById('clearLineLabelBtn');
+  const chipBtns = document.querySelectorAll('.line-chip-btn');
+
+  if (!modal || !input) return;
+
+  activeLineShapeForLabel = shape;
+  activeLineLabelSaveCallback = onSave;
+
+  input.value = (shape && shape.text) ? shape.text : '';
+  modal.style.display = 'flex';
+
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 50);
+
+  function closeLineModal() {
+    modal.style.display = 'none';
+    activeLineShapeForLabel = null;
+    activeLineLabelSaveCallback = null;
+  }
+
+  function applyLabel() {
+    if (activeLineShapeForLabel) {
+      const val = input.value.trim();
+      activeLineShapeForLabel.text = val;
+      if (typeof activeLineLabelSaveCallback === 'function') {
+        activeLineLabelSaveCallback();
+      }
+      showToast(val ? `🏷️ Line labeled: "${val}"` : "🏷️ Line label cleared");
+    }
+    closeLineModal();
+  }
+
+  function clearLabel() {
+    input.value = '';
+    if (activeLineShapeForLabel) {
+      activeLineShapeForLabel.text = '';
+      if (typeof activeLineLabelSaveCallback === 'function') {
+        activeLineLabelSaveCallback();
+      }
+      showToast("🏷️ Line label cleared");
+    }
+    closeLineModal();
+  }
+
+  // Bind handlers once
+  if (!modal._handlersBound) {
+    if (closeBtn) closeBtn.onclick = closeLineModal;
+    if (cancelBtn) cancelBtn.onclick = closeLineModal;
+    if (backdrop) backdrop.onclick = closeLineModal;
+    if (saveBtn) saveBtn.onclick = applyLabel;
+    if (clearBtn) clearBtn.onclick = clearLabel;
+
+    input.onkeydown = function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyLabel();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeLineModal();
+      }
+    };
+
+    chipBtns.forEach(chip => {
+      chip.onclick = function() {
+        const textVal = chip.getAttribute('data-text');
+        if (textVal) {
+          input.value = textVal;
+          input.focus();
+        }
+      };
+    });
+
+    modal._handlersBound = true;
+  }
+};
+
+// ============================================================================
+// 8. PB TRADES "ICT FOR DUMMIES" ACADEMY MODULES & EXAM
+// ============================================================================
+let activePbModuleId = "pb-module-1";
+let activePbQuizIndex = 0;
+
+function initPbTradesAcademy() {
+  renderPbAcademyNav();
+  renderPbAcademyContent(activePbModuleId);
+  renderPbQuiz(activePbQuizIndex);
+}
+
+function renderPbAcademyNav() {
+  const container = document.getElementById('pbAcademyModuleNav');
+  if (!container || !window.PB_ACADEMY_DATA) return;
+
+  container.innerHTML = window.PB_ACADEMY_DATA.modules.map(mod => {
+    const isActive = mod.id === activePbModuleId;
+    return `
+      <div class="module-nav-item ${isActive ? 'active' : ''}" onclick="selectPbAcademyModule('${mod.id}')">
+        <div style="font-size: 10px; color: var(--accent-cyan); font-weight: 700;">${mod.badge}</div>
+        <div class="module-nav-title">${mod.title}</div>
+        <div class="module-nav-desc">${mod.description}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.selectPbAcademyModule = function(id) {
+  activePbModuleId = id;
+  renderPbAcademyNav();
+  renderPbAcademyContent(id);
+};
+
+function renderPbAcademyContent(modId) {
+  const container = document.getElementById('pbAcademyModuleContent');
+  if (!container || !window.PB_ACADEMY_DATA) return;
+
+  const mod = window.PB_ACADEMY_DATA.modules.find(m => m.id === modId);
+  if (!mod) return;
+
+  container.innerHTML = `
+    <div class="module-header">
+      <div style="font-size: 11px; color: var(--accent-cyan); font-weight: 700; text-transform: uppercase;">${mod.badge} • ${mod.readTime}</div>
+      <h2>${mod.title}</h2>
+      <p style="color: var(--text-muted); font-size: 13px;">${mod.description}</p>
+    </div>
+    ${mod.content}
+    ${renderAcademyChartMarkupSection(mod)}
+  `;
+
+  // Render the real chart onto the canvas after DOM injection
+  if (mod.chartExample) {
+    setTimeout(() => {
+      renderRealAcademyChart(mod.chartExample);
+    }, 40);
+  }
+}
+
+function renderAcademyChartMarkupSection(mod) {
+  if (!mod.chartExample) return '';
+  const ex = mod.chartExample;
+
+  return `
+    <div class="academy-real-chart-card" style="margin-top: 24px; background: #0c121e; border: 1px solid #1e293b; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.4);">
+      <div class="chart-card-header" style="background: #111827; padding: 12px 16px; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <div style="font-size: 13px; font-weight: 800; color: #38bdf8;">${ex.title}</div>
+          <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">${ex.subtitle}</div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="badge" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;">${ex.symbol} • ${ex.tf}</span>
+          <button class="btn btn-secondary btn-sm" onclick="openAcademyScenarioInReplay('${ex.scenarioId}')" style="background: #1e293b; border: 1px solid #334155; color: #f1f5f9; padding: 4px 10px; font-size: 11px; border-radius: 6px; cursor: pointer;">
+            ⏮️ Open in Full Replay
+          </button>
+        </div>
+      </div>
+
+      <div style="position: relative; width: 100%; height: 380px; background: #080c14;">
+        <canvas id="academyExampleCanvas" style="width: 100%; height: 100%; display: block;"></canvas>
+      </div>
+
+      <div style="padding: 14px 16px; background: #0f172a; border-top: 1px solid #1e293b;">
+        <div style="font-size: 11px; font-weight: 800; color: #f59e0b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+          🔍 PB Trades Institutional Order Flow Breakdown:
+        </div>
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #cbd5e1; line-height: 1.6;">
+          ${ex.breakdown.map(b => `<li style="margin-bottom: 6px;">${b}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+window.openAcademyScenarioInReplay = function(scenarioId) {
+  const replayTabBtn = document.querySelector('[data-tab="replayTab"]');
+  if (replayTabBtn) replayTabBtn.click();
+  const select = document.getElementById('replayScenarioSelect');
+  if (select) {
+    select.value = scenarioId;
+    if (window.replayEngine) {
+      window.replayEngine.loadScenario(scenarioId);
+      showToast(`Loaded Academy Scenario into Replay: ${window.replayEngine.scenario.name}`);
+    }
+  }
+};
+
+function renderRealAcademyChart(chartEx) {
+  const canvas = document.getElementById('academyExampleCanvas');
+  if (!canvas || !window.REPLAY_SCENARIOS) return;
+
+  const scenario = window.REPLAY_SCENARIOS.getById(chartEx.scenarioId);
+  if (!scenario || !scenario.raw1m || scenario.raw1m.length === 0) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = rect.width || canvas.parentElement.clientWidth || 800;
+  const h = 380;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  // 1. Slice specific 1m bars if sliceStart is specified, else take sliceEnd
+  let rawSlice;
+  if (chartEx.sliceStart !== undefined && chartEx.sliceEnd !== undefined) {
+    rawSlice = scenario.raw1m.slice(chartEx.sliceStart, chartEx.sliceEnd);
+  } else if (chartEx.sliceEnd !== undefined) {
+    const end = chartEx.sliceEnd;
+    const start = Math.max(0, end - 225); // ~45 5m candles
+    rawSlice = scenario.raw1m.slice(start, end);
+  } else {
+    rawSlice = scenario.raw1m.slice(Math.max(0, scenario.raw1m.length - 225));
+  }
+
+  // Aggregate candles to timeframe (default 5m)
+  const visibleCandles = window.REPLAY_SCENARIOS.aggregate(rawSlice, chartEx.tf || '5m');
+  if (visibleCandles.length === 0) return;
+
+  // 2. Compute price bounds across both candles AND annotations so all markups fit comfortably!
+  let minPrice = Infinity;
+  let maxPrice = -Infinity;
+  visibleCandles.forEach(c => {
+    if (c.low < minPrice) minPrice = c.low;
+    if (c.high > maxPrice) maxPrice = c.high;
+  });
+
+  if (chartEx.annotations) {
+    chartEx.annotations.forEach(ann => {
+      if (ann.type === 'box') {
+        const lo = Math.min(ann.y1, ann.y2);
+        const hi = Math.max(ann.y1, ann.y2);
+        if (lo < minPrice) minPrice = lo;
+        if (hi > maxPrice) maxPrice = hi;
+      } else if (ann.type === 'ray') {
+        if (ann.y < minPrice) minPrice = ann.y;
+        if (ann.y > maxPrice) maxPrice = ann.y;
+      }
+    });
+  }
+
+  const pad = (maxPrice - minPrice) * 0.12 || 2.0;
+  minPrice -= pad;
+  maxPrice += pad;
+  const priceRange = maxPrice - minPrice;
+
+  const chartWidth = w - 70;
+  const chartHeight = h - 25;
+  const barWidth = chartWidth / visibleCandles.length;
+  const candleWidth = Math.max(3, barWidth * 0.72);
+
+  const priceToY = (p) => chartHeight - ((p - minPrice) / priceRange) * chartHeight;
+
+  // 3. Background
+  ctx.fillStyle = '#080c14';
+  ctx.fillRect(0, 0, w, h);
+
+  // 4. Grid Lines & Price Axis
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 5; i++) {
+    const y = (chartHeight / 6) * i;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(chartWidth, y);
+    ctx.stroke();
+
+    const p = maxPrice - (i / 6) * priceRange;
+    ctx.fillStyle = '#64748b';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(p.toFixed(2), chartWidth + 6, y + 3);
+  }
+
+  // Right price axis separator line
+  ctx.strokeStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.moveTo(chartWidth, 0);
+  ctx.lineTo(chartWidth, chartHeight);
+  ctx.stroke();
+
+  // 5. Render Candlesticks First (So Annotations Stand Out Clearly)
+  visibleCandles.forEach((c, i) => {
+    const xCenter = i * barWidth + barWidth / 2;
+    const isUp = c.close >= c.open;
+    const bodyColor = isUp ? '#10b981' : '#ef4444';
+    const wickColor = isUp ? '#34d399' : '#f87171';
+
+    const yOpen = priceToY(c.open);
+    const yClose = priceToY(c.close);
+    const yHigh = priceToY(c.high);
+    const yLow = priceToY(c.low);
+
+    // Wick
+    ctx.strokeStyle = wickColor;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(xCenter, yHigh);
+    ctx.lineTo(xCenter, yLow);
+    ctx.stroke();
+
+    // Body
+    ctx.fillStyle = bodyColor;
+    const top = Math.min(yOpen, yClose);
+    const hCandle = Math.max(2, Math.abs(yClose - yOpen));
+    ctx.fillRect(xCenter - candleWidth / 2, top, candleWidth, hCandle);
+  });
+
+  // 6. Render Annotations (FVG Boxes, Liquidity Rays, Midpoints)
+  if (chartEx.annotations) {
+    chartEx.annotations.forEach(ann => {
+      if (ann.type === 'box') {
+        const yTop = priceToY(Math.max(ann.y1, ann.y2));
+        const yBot = priceToY(Math.min(ann.y1, ann.y2));
+        const xStart = chartWidth * (ann.xPercent !== undefined ? ann.xPercent : 0.4);
+        const boxW = chartWidth * (ann.wPercent !== undefined ? ann.wPercent : 0.35);
+
+        // Shaded Box
+        ctx.fillStyle = ann.color || 'rgba(16, 185, 129, 0.28)';
+        ctx.fillRect(xStart, yTop, boxW, yBot - yTop);
+        ctx.strokeStyle = ann.borderColor || ann.color.replace('0.25', '0.85').replace('0.28', '0.9').replace('0.3', '1.0') || '#10b981';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(xStart, yTop, boxW, yBot - yTop);
+
+        // 50% CE dashed line inside FVG
+        const midY = (yTop + yBot) / 2;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.beginPath();
+        ctx.moveTo(xStart, midY);
+        ctx.lineTo(xStart + boxW, midY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Label Badge
+        ctx.fillStyle = 'rgba(10, 14, 23, 0.85)';
+        ctx.font = 'bold 10px monospace';
+        const tw = ctx.measureText(ann.label).width;
+        ctx.fillRect(xStart + 4, yTop - 14, tw + 8, 14);
+        ctx.strokeStyle = ann.borderColor || '#38bdf8';
+        ctx.lineWidth = 0.8;
+        ctx.strokeRect(xStart + 4, yTop - 14, tw + 8, 14);
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.textAlign = 'left';
+        ctx.fillText(ann.label, xStart + 8, yTop - 3);
+
+      } else if (ann.type === 'ray') {
+        const y = priceToY(ann.y);
+        ctx.strokeStyle = ann.color || '#a855f7';
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([5, 3]);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(chartWidth, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Label Pill
+        const labelText = ` ${ann.label} (${ann.y.toFixed(2)}) `;
+        ctx.font = 'bold 10px monospace';
+        const tw = ctx.measureText(labelText).width;
+        const xPos = Math.min(chartWidth - tw - 12, chartWidth * (ann.xPercent !== undefined ? ann.xPercent : 0.6));
+
+        ctx.fillStyle = '#0a0e17';
+        ctx.fillRect(xPos, y - 9, tw + 10, 18);
+        ctx.strokeStyle = ann.color || '#a855f7';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(xPos, y - 9, tw + 10, 18);
+
+        ctx.fillStyle = ann.color || '#a855f7';
+        ctx.textAlign = 'left';
+        ctx.fillText(labelText, xPos + 4, y + 4);
+      }
+    });
+  }
+
+  // 7. Watermark & Exchange Tag
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`CME Futures: ${chartEx.symbol} (${chartEx.tf || '5m'}) • PB Trades Model Study`, 12, 18);
+}
+
+function renderPbQuiz(index) {
+  const container = document.getElementById('pbQuizContent');
+  if (!container || !window.PB_ACADEMY_DATA || !window.PB_ACADEMY_DATA.quizzes) return;
+
+  const quiz = window.PB_ACADEMY_DATA.quizzes[index];
+  if (!quiz) return;
+
+  container.innerHTML = `
+    <div class="quiz-question" style="font-weight: 700; font-size: 14px; margin-bottom: 12px; color: #fff;">
+      <span style="color: var(--accent-cyan);">Question ${index + 1} of ${window.PB_ACADEMY_DATA.quizzes.length}:</span> ${quiz.question}
+    </div>
+    <div id="pbQuizOptionsContainer">
+      ${quiz.options.map((opt, idx) => `
+        <div class="quiz-option" onclick="handlePbQuizAnswer(${index}, ${idx}, ${quiz.correct})">
+          <strong>${String.fromCharCode(65 + idx)}.</strong> ${opt}
+        </div>
+      `).join('')}
+    </div>
+    <div id="pbQuizResultBox" style="display: none; margin-top: 12px;"></div>
+  `;
+}
+
+window.handlePbQuizAnswer = function(qIdx, selectedIdx, correctIdx) {
+  const options = document.querySelectorAll('#pbQuizOptionsContainer .quiz-option');
+  options.forEach((opt, idx) => {
+    opt.onclick = null;
+    if (idx === correctIdx) opt.classList.add('correct');
+    else if (idx === selectedIdx) opt.classList.add('incorrect');
+  });
+
+  const quiz = window.PB_ACADEMY_DATA.quizzes[qIdx];
+  const resultBox = document.getElementById('pbQuizResultBox');
+  if (resultBox) {
+    resultBox.style.display = 'block';
+    resultBox.className = 'quiz-explanation';
+    resultBox.innerHTML = `
+      <strong>${selectedIdx === correctIdx ? '✅ Correct! PB Trades Execution Mastered.' : '❌ Incorrect.'}</strong><br>
+      <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">${quiz.explanation}</div>
+      <div style="margin-top: 12px;">
+        <button class="btn btn-secondary btn-sm" onclick="nextPbQuiz()">Next Drill ➔</button>
+      </div>
+    `;
+  }
+};
+
+window.nextPbQuiz = function() {
+  activePbQuizIndex = (activePbQuizIndex + 1) % window.PB_ACADEMY_DATA.quizzes.length;
+  renderPbQuiz(activePbQuizIndex);
+};
+
+// ============================================================================
+// 9. BACKTEST JOURNAL & PERFORMANCE LOG
+// ============================================================================
+function updateBacktestJournalUI() {
+  if (!window.replayEngine) return;
+  const engine = window.replayEngine;
+  const stats = engine.getStats();
+  const trades = engine.account.trades;
+
+  const balEl = document.getElementById('paperBalanceDisplay');
+  const pnlEl = document.getElementById('paperUnrealizedDisplay');
+  const winRateEl = document.getElementById('paperWinRateDisplay');
+  const pfEl = document.getElementById('paperProfitFactorDisplay');
+
+  if (balEl) balEl.textContent = `$${parseFloat(stats.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  if (pnlEl) {
+    const pnl = parseFloat(stats.totalPnL);
+    pnlEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+    pnlEl.style.color = pnl >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+  }
+  if (winRateEl) winRateEl.textContent = `${stats.winRate}%`;
+  if (pfEl) pfEl.textContent = stats.profitFactor;
+
+  const tbody = document.getElementById('backtestJournalTbody');
+  if (tbody) {
+    if (trades.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">
+            No backtested trades yet. Use the Replay Backtest tab to execute trades on historical candles.
+          </td>
+        </tr>
+      `;
+    } else {
+      tbody.innerHTML = trades.map(t => {
+        const isBull = t.side === 'BUY';
+        const isWin = t.pnl > 0;
+        const timeStr = t.time ? new Date(t.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--';
+
+        return `
+          <tr>
+            <td>${timeStr}</td>
+            <td><strong>${engine.scenario.symbol}</strong></td>
+            <td><span class="${isBull ? 'badge-bullish' : 'badge-bearish'}">${t.side}</span></td>
+            <td>${t.model || 'PB Trades Model'}</td>
+            <td style="font-family: var(--font-mono);">${t.entryPrice.toFixed(2)}</td>
+            <td style="font-family: var(--font-mono);">${(t.exitPrice || 0).toFixed(2)}</td>
+            <td style="font-family: var(--font-mono); color: ${isWin ? 'var(--bullish)' : 'var(--bearish)'};">
+              ${isWin ? '+' : ''}${(t.pts || 0).toFixed(2)} pts
+            </td>
+            <td style="font-family: var(--font-mono); font-weight: 700; color: ${isWin ? 'var(--bullish)' : 'var(--bearish)'};">
+              ${isWin ? '+' : ''}$${(t.pnl || 0).toFixed(2)}
+            </td>
+            <td>
+              <span class="${isWin ? 'badge-bullish' : 'badge-bearish'}">${t.status}</span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+}
+
+// ============================================================================
+// 10. MARKUP TEST / PRACTICE EXAM TAB
+// ============================================================================
+const MARKUP_CHALLENGES = [
+  {
+    id: 'markup-1',
+    name: '🎯 NY Silver Bullet FVG Identification (MNQ)',
+    scenarioId: 'real-session-2026-09-11',
+    symbol: 'MNQ',
+    sliceStart: 600,
+    sliceEnd: 720,
+    defaultTf: '5m',
+    description: 'This chart shows the NY AM session around the 10:00-11:00 Silver Bullet window. Identify all Fair Value Gaps, mark any BSL/SSL pools that got swept, and draw your ideal long or short position bracket with SL and TP.',
+    objectives: [
+      'Mark ALL Fair Value Gaps (bullish and bearish)',
+      'Identify any BSL or SSL liquidity sweeps',
+      'Draw the Market Structure Shift (MSS) displacement candle',
+      'Place a Long or Short position tool with entry at the FVG, structural SL, and target at opposing liquidity'
+    ],
+    answer: {
+      notes: 'The Silver Bullet window (10:00-11:00 NY) produced a bearish displacement after sweeping the London High/BSL. A bearish FVG formed on the 5m chart between the swing high and the displacement. The MSS occurred on the first lower-low break. Entry was at the 50% CE of the FVG, SL above the FVG high, TP at the SSL below the Asia Low.',
+      drawings: [
+        { type: 'liquidity', label: 'BSL (London High Sweep)', priceLevel: 'high', color: '#a855f7', barRange: [0, 0.3] },
+        { type: 'fvg', direction: 'bearish', barRange: [0.25, 0.38], priceRange: 'auto' },
+        { type: 'mss', label: 'MSS (Lower Low Break)', barPosition: 0.35, color: '#ef4444' },
+        { type: 'entry', direction: 'short', barPosition: 0.40, label: 'Short Entry @ FVG 50% CE' }
+      ]
+    }
+  },
+  {
+    id: 'markup-2',
+    name: '🎯 London Sweep into NY Open Reversal (MNQ)',
+    scenarioId: 'real-session-2026-09-10',
+    symbol: 'MNQ',
+    sliceStart: 300,
+    sliceEnd: 660,
+    defaultTf: '5m',
+    description: 'This chart spans London close through the full NY AM open. Look for the London high/low sweep, the displacement into the NY killzone, and markup the full PB Trades 5-point setup if you see one.',
+    objectives: [
+      'Identify the London Session High and Low',
+      'Mark the liquidity sweep that kicked off the reversal',
+      'Draw the displacement FVG and OTE zone',
+      'Set up a Long or Short position bracket with proper R:R',
+      'Note the Midnight Open level if visible'
+    ],
+    answer: {
+      notes: 'London session created a range. The NY open swept the London Low (SSL), then displaced bullish creating an FVG on the 5m chart. The MSS confirmed the reversal. The OTE zone (0.62-0.79 fib of the displacement leg) aligned with the FVG. Entry at the FVG retest, SL below the SSL sweep low, TP at the London High (BSL target).',
+      drawings: [
+        { type: 'liquidity', label: 'SSL (London Low Sweep)', priceLevel: 'low', color: '#a855f7', barRange: [0.3, 0.45] },
+        { type: 'fvg', direction: 'bullish', barRange: [0.45, 0.55], priceRange: 'auto' },
+        { type: 'mss', label: 'MSS (Higher High Break)', barPosition: 0.50, color: '#10b981' },
+        { type: 'entry', direction: 'long', barPosition: 0.55, label: 'Long Entry @ FVG Retest' }
+      ]
+    }
+  },
+  {
+    id: 'markup-3',
+    name: '🎯 Asia Range to London Displacement (MNQ)',
+    scenarioId: 'real-session-2026-09-09',
+    symbol: 'MNQ',
+    sliceStart: 0,
+    sliceEnd: 480,
+    defaultTf: '15m',
+    description: 'This chart shows the full Asia session and London killzone on the 15m timeframe. Identify the Asia range consolidation, mark where London displaced out of the range, and set up the PB Trades entry model.',
+    objectives: [
+      'Draw horizontal lines at the Asia High and Asia Low',
+      'Mark the London displacement candle(s)',
+      'Identify any FVGs created during the London displacement',
+      'Draw your entry bracket if the setup meets the 5-point checklist'
+    ],
+    answer: {
+      notes: 'Asia session built a tight range. London swept the Asia Low first (engineered liquidity), then displaced through the Asia High creating a bullish FVG. The MSS was confirmed on the break above the Asia High. Entry was at the retest of the Asia High (now support) which overlapped with the FVG.',
+      drawings: [
+        { type: 'liquidity', label: 'Asia High (BSL)', priceLevel: 'high', color: '#fbbf24', barRange: [0, 0.5] },
+        { type: 'liquidity', label: 'Asia Low (SSL)', priceLevel: 'low', color: '#fbbf24', barRange: [0, 0.5] },
+        { type: 'fvg', direction: 'bullish', barRange: [0.55, 0.65], priceRange: 'auto' },
+        { type: 'entry', direction: 'long', barPosition: 0.65, label: 'Long Entry @ Asia High Retest + FVG' }
+      ]
+    }
+  },
+  {
+    id: 'markup-4',
+    name: '🎯 Full Session Markup — Find the Trade (MNQ)',
+    scenarioId: 'real-session-2026-09-04',
+    symbol: 'MNQ',
+    sliceStart: 200,
+    sliceEnd: 800,
+    defaultTf: '5m',
+    description: 'A full trading session from Asia through NY lunch. Your job: study the multi-session structure, identify the highest-probability setup using PB Trades model, and mark it up completely. There may be one valid setup or none.',
+    objectives: [
+      'Mark the Midnight Open, Asia H/L, London H/L',
+      'Identify all liquidity sweeps',
+      'Find and mark the highest-probability FVG entry',
+      'Place your full trade bracket (entry, SL, TP) if valid',
+      'If no valid setup exists, note why in your analysis'
+    ],
+    answer: {
+      notes: 'This session required patience. Asia built a range, London expanded but no clean displacement occurred until the 09:30 NY open. The buy-side liquidity above the Asia High was swept, followed by a bearish displacement creating a clean 5m FVG. The MSS confirmed below the previous swing low. The short entry was at the FVG midpoint (50% CE), SL above the BSL sweep high, TP at the London Low.',
+      drawings: [
+        { type: 'liquidity', label: 'BSL (Asia High Sweep)', priceLevel: 'high', color: '#a855f7', barRange: [0.5, 0.6] },
+        { type: 'fvg', direction: 'bearish', barRange: [0.58, 0.68], priceRange: 'auto' },
+        { type: 'mss', label: 'MSS (Bearish Break of Structure)', barPosition: 0.62, color: '#ef4444' },
+        { type: 'entry', direction: 'short', barPosition: 0.68, label: 'Short Entry @ FVG 50% CE' }
+      ]
+    }
+  },
+  {
+    id: 'markup-5',
+    name: '🎯 Monday 525pt Trend Run & FVG Inversion (2026-08-24)',
+    scenarioId: 'real-session-2026-08-24',
+    symbol: 'MNQ',
+    sliceStart: 300,
+    sliceEnd: 850,
+    defaultTf: '5m',
+    description: 'A genuine impulsive Monday trend day. Identify the clean bearish Fair Value Gaps that formed after the 09:30 NY open as previous session support gave way. Practice drawing your short position bracket and targeting external Sell-Side Liquidity.',
+    objectives: [
+      'Locate the Midnight Open and Asia Low levels',
+      'Identify the displacement candle breaking below overnight structure',
+      'Mark the premium 5m bearish Fair Value Gap',
+      'Place your Short position bracket with SL above the displacement wick and TP at external SSL'
+    ],
+    answer: {
+      notes: 'Monday opened with sustained institutional selling. Once the Asia Low was breached with heavy displacement, a series of bearish FVGs were formed. Price offered an optimal entry retesting the FVG midpoint (50% CE) while remaining firmly below the Midnight Open.',
+      drawings: [
+        { type: 'liquidity', label: 'Asia Low (SSL Breached)', priceLevel: 'low', color: '#ef4444', barRange: [0.2, 0.4] },
+        { type: 'fvg', direction: 'bearish', barRange: [0.42, 0.55], priceRange: 'auto' },
+        { type: 'mss', label: 'MSS (Structure Breakdown)', barPosition: 0.45, color: '#ef4444' },
+        { type: 'entry', direction: 'short', barPosition: 0.52, label: 'Short Entry @ 5m FVG Retest' }
+      ]
+    }
+  },
+  {
+    id: 'markup-6',
+    name: '🎯 NQ vs ES SMT Divergence & 558pt Squeeze (2026-08-26)',
+    scenarioId: 'real-session-2026-08-26',
+    symbol: 'MNQ',
+    sliceStart: 350,
+    sliceEnd: 900,
+    defaultTf: '5m',
+    description: 'Analyze the massive 558-point short squeeze on MNQ. Mark where NQ took out overnight liquidity while ES held higher lows (SMT Divergence), and locate the subsequent bullish FVG confirmation.',
+    objectives: [
+      'Spot the discount liquidity sweep on NQ',
+      'Mark the Market Structure Shift (MSS) displacement candle',
+      'Highlight the 5m bullish Fair Value Gap formed during the breakout',
+      'Place a Long position bracket targeting the Previous Day High'
+    ],
+    answer: {
+      notes: 'An explosive SMT divergence occurred at the NY open. While NQ swept liquidity at discount, ES formed a higher low. The aggressive displacement produced a wide bullish FVG. Re-entry at the top of the FVG yielded a multi-hundred point run straight into external BSL.',
+      drawings: [
+        { type: 'liquidity', label: 'SSL Sweep (SMT Discount)', priceLevel: 'low', color: '#a855f7', barRange: [0.3, 0.42] },
+        { type: 'fvg', direction: 'bullish', barRange: [0.45, 0.58], priceRange: 'auto' },
+        { type: 'mss', label: 'MSS (Bullish Displacement)', barPosition: 0.48, color: '#10b981' },
+        { type: 'entry', direction: 'long', barPosition: 0.55, label: 'Long Entry @ Bullish FVG Retest' }
+      ]
+    }
+  },
+  {
+    id: 'markup-7',
+    name: '🎯 Month-End Institutional Flow & FVG Retest (2026-08-31)',
+    scenarioId: 'real-session-2026-08-31',
+    symbol: 'MNQ',
+    sliceStart: 250,
+    sliceEnd: 750,
+    defaultTf: '15m',
+    description: 'Controlled month-end institutional rebalancing. Spot the 15m bullish order block and Fair Value Gap that formed during the London session and provided support throughout the NY morning.',
+    objectives: [
+      'Draw the 15m Bullish Fair Value Gap',
+      'Identify the Midnight Open line and notice how price treated it as support',
+      'Place a Long trade bracket targeting the session high'
+    ],
+    answer: {
+      notes: 'Month-end institutional accumulation created a classic staircase structure. Price repeatedly respected the Midnight Open and mitigated the 15m FVG without closing below it, presenting a low-stress long setup.',
+      drawings: [
+        { type: 'fvg', direction: 'bullish', barRange: [0.35, 0.50], priceRange: 'auto' },
+        { type: 'entry', direction: 'long', barPosition: 0.50, label: 'Long Entry @ Midnight Open + FVG Confluence' }
+      ]
+    }
+  },
+  {
+    id: 'markup-8',
+    name: '🎯 Gold (MGC) Safe-Haven Squeeze (2026-09-09)',
+    scenarioId: 'real-session-2026-09-09-mgc',
+    symbol: 'MGC',
+    sliceStart: 200,
+    sliceEnd: 700,
+    defaultTf: '5m',
+    description: 'Commodity futures order flow on Micro Gold (MGC). Practice identifying ICT setups on non-index assets as Gold decouples from equities with a $95/oz (+95 pt) expansion.',
+    objectives: [
+      'Mark the London Low on Gold',
+      'Identify the explosive 5m Bullish FVG that formed around 08:30 NY time',
+      'Draw your Long position bracket targeting the Prior Day High ($4,480)'
+    ],
+    answer: {
+      notes: 'Gold respected ICT delivery models with precision. London swept the Asia low, followed by an aggressive 08:30 displacement candle leaving an unmitigated 5m FVG. Entry at the FVG retest targeted the Previous Day High.',
+      drawings: [
+        { type: 'liquidity', label: 'London Low SSL Sweep', priceLevel: 'low', color: '#fbbf24', barRange: [0.25, 0.38] },
+        { type: 'fvg', direction: 'bullish', barRange: [0.42, 0.54], priceRange: 'auto' },
+        { type: 'entry', direction: 'long', barPosition: 0.52, label: 'Long Entry @ Gold FVG ($4,400)' }
+      ]
+    }
+  }
+];
+
+let markupEngine = null;
+let markupAnswerRevealed = false;
+
+function initMarkupTestTab() {
+  const canvas = document.getElementById('markupTestCanvas');
+  if (!canvas || !window.ReplayEngine) return;
+
+  markupEngine = new window.ReplayEngine();
+  window.markupTestEngine = markupEngine;
+
+  const challengeSelect = document.getElementById('markupChallengeSelect');
+  if (challengeSelect) {
+    challengeSelect.innerHTML = MARKUP_CHALLENGES.map(c => `
+      <option value="${c.id}">${c.name}</option>
+    `).join('');
+
+    challengeSelect.addEventListener('change', () => {
+      loadMarkupChallenge(challengeSelect.value);
+    });
+  }
+
+  markupEngine.init(canvas, MARKUP_CHALLENGES[0].scenarioId);
+  loadMarkupChallenge(MARKUP_CHALLENGES[0].id);
+
+  const tfPills = document.querySelectorAll('#markupTfPills .pill-btn');
+  tfPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      tfPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      markupEngine.setTimeframe(pill.getAttribute('data-tf'));
+      updateMarkupPaneTag();
+    });
+  });
+
+  // Session Markouts & Auto-Markup Toggle in Markup Test
+  const markupSessionsBtn = document.getElementById('markupSessionsToggleBtn');
+  const markupAutoMarkupBtn = document.getElementById('markupAutoMarkupToggleBtn');
+  const markupToolAutoMarkupBtn = document.getElementById('markupToolAutoMarkupBtn');
+
+  function updateMarkupSessionsUI(isActive) {
+    if (markupSessionsBtn) {
+      markupSessionsBtn.classList.toggle('active', isActive);
+      const txt = markupSessionsBtn.querySelector('.status-text');
+      if (txt) txt.textContent = isActive ? 'ON' : 'OFF';
+    }
+  }
+
+  function updateMarkupAutoMarkupUI(isActive) {
+    if (markupAutoMarkupBtn) {
+      markupAutoMarkupBtn.classList.toggle('active', isActive);
+      const txt = markupAutoMarkupBtn.querySelector('.status-text');
+      if (txt) txt.textContent = isActive ? 'ON' : 'OFF';
+    }
+    if (markupToolAutoMarkupBtn) {
+      markupToolAutoMarkupBtn.classList.toggle('active', isActive);
+    }
+  }
+
+  if (markupSessionsBtn) {
+    markupSessionsBtn.addEventListener('click', () => {
+      const active = markupEngine.toggleSessions();
+      updateMarkupSessionsUI(active);
+      showToast(active ? "🕒 Multi-Session Markouts: ON (Asia H/L, London H/L, Midnight Open, PDH/PDL)" : "🕒 Multi-Session Markouts: OFF");
+    });
+  }
+
+  if (markupAutoMarkupBtn) {
+    markupAutoMarkupBtn.addEventListener('click', () => {
+      const active = markupEngine.toggleAutoMarkup();
+      updateMarkupAutoMarkupUI(active);
+      showToast(active ? "⚡ Auto ICT Markups: ON (FVGs & Sweeps)" : "⚡ Auto ICT Markups: OFF (Clean Chart)");
+    });
+  }
+
+  if (markupToolAutoMarkupBtn) {
+    markupToolAutoMarkupBtn.addEventListener('click', () => {
+      const active = markupEngine.toggleAutoMarkup();
+      updateMarkupAutoMarkupUI(active);
+      showToast(active ? "⚡ Auto ICT Markups: ON (FVGs & Sweeps)" : "⚡ Auto ICT Markups: OFF (Clean Chart)");
+    });
+  }
+
+  const toolBtns = document.querySelectorAll('#markupDrawingToolbar .tool-btn');
+  toolBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tool = btn.getAttribute('data-tool');
+      if (tool === 'toggle_automarkup') {
+        const active = markupEngine.toggleAutoMarkup();
+        updateMarkupAutoMarkupUI(active);
+        showToast(active ? "🧠 Auto ICT Markups: ON" : "🧠 Auto ICT Markups: OFF (Clean Chart)");
+        return;
+      }
+      if (tool === 'undo') {
+        markupEngine.undo();
+        return;
+      }
+      if (tool === 'zoom_in') {
+        markupEngine.zoomIn();
+        return;
+      }
+      if (tool === 'zoom_out') {
+        markupEngine.zoomOut();
+        return;
+      }
+      if (tool === 'zoom_reset') {
+        markupEngine.resetZoom();
+        showToast("↺ View reset to default auto-fit");
+        return;
+      }
+      if (tool === 'clear') {
+        markupEngine.setTool('clear');
+        toolBtns.forEach(b => b.classList.remove('active'));
+        const ptr = document.querySelector('#markupDrawingToolbar [data-tool="pointer"]');
+        if (ptr) ptr.classList.add('active');
+        return;
+      }
+      toolBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      markupEngine.setTool(tool);
+    });
+  });
+
+  const clearBtn = document.getElementById('markupClearBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      markupEngine.drawings = [];
+      markupEngine.undoStack = [];
+      markupAnswerRevealed = false;
+      updateRevealButton();
+      markupEngine.render();
+    });
+  }
+
+  const revealBtn = document.getElementById('markupRevealBtn');
+  if (revealBtn) {
+    revealBtn.addEventListener('click', () => {
+      markupAnswerRevealed = !markupAnswerRevealed;
+      updateRevealButton();
+      markupEngine.render();
+      if (markupAnswerRevealed) {
+        renderAnswerOverlay();
+      }
+    });
+  }
+
+  markupEngine.onStateChange = (state) => {
+    if (state.autoMarkup !== undefined) {
+      updateMarkupAutoMarkupUI(state.autoMarkup);
+    }
+    if (state.sessions !== undefined) {
+      updateMarkupSessionsUI(state.sessions);
+    }
+  };
+
+  const originalRender = markupEngine.render.bind(markupEngine);
+  markupEngine.render = function() {
+    originalRender();
+    if (markupAnswerRevealed) {
+      renderAnswerOverlay();
+    }
+  };
+}
+
+function loadMarkupChallenge(challengeId) {
+  const challenge = MARKUP_CHALLENGES.find(c => c.id === challengeId);
+  if (!challenge) return;
+
+  markupAnswerRevealed = false;
+  updateRevealButton();
+
+  markupEngine.loadScenario(challenge.scenarioId);
+
+  if (challenge.sliceEnd !== undefined) {
+    markupEngine.current1mIndex = Math.min(markupEngine.raw1m.length - 1, challenge.sliceEnd);
+    markupEngine.panOffsetBars = 0;
+  }
+
+  markupEngine.setTimeframe(challenge.defaultTf || '5m');
+
+  const tfPills = document.querySelectorAll('#markupTfPills .pill-btn');
+  tfPills.forEach(p => {
+    p.classList.toggle('active', p.getAttribute('data-tf') === (challenge.defaultTf || '5m'));
+  });
+
+  const descEl = document.getElementById('markupChallengeDescription');
+  if (descEl) descEl.textContent = challenge.description;
+
+  const objEl = document.getElementById('markupObjectivesList');
+  if (objEl) {
+    objEl.innerHTML = challenge.objectives.map(o => `<li>${o}</li>`).join('');
+  }
+
+  const ansNotesEl = document.getElementById('markupAnswerNotes');
+  if (ansNotesEl) ansNotesEl.textContent = challenge.answer.notes;
+
+  const scoreCard = document.getElementById('markupScoreCard');
+  if (scoreCard) scoreCard.style.display = 'none';
+
+  updateMarkupPaneTag();
+  markupEngine.render();
+}
+
+function updateMarkupPaneTag() {
+  const tag = document.getElementById('markupPaneTag');
+  if (tag && markupEngine) {
+    const sym = markupEngine.scenario ? markupEngine.scenario.symbol : 'MNQ';
+    const tf = markupEngine.activeTf ? markupEngine.activeTf.toUpperCase() : '5M';
+    tag.textContent = `🎯 MARKUP TEST: ${sym} • ${tf}`;
+  }
+}
+
+function updateRevealButton() {
+  const btn = document.getElementById('markupRevealBtn');
+  const scoreCard = document.getElementById('markupScoreCard');
+  const statusPill = document.getElementById('markupPaneStatus');
+
+  if (btn) {
+    btn.textContent = markupAnswerRevealed ? '🙈 Hide Answer' : '👁️ Reveal Answer';
+    btn.classList.toggle('revealed', markupAnswerRevealed);
+  }
+  if (scoreCard) {
+    scoreCard.style.display = markupAnswerRevealed ? 'block' : 'none';
+  }
+  if (statusPill) {
+    statusPill.textContent = markupAnswerRevealed ? '✅ Answer overlay visible' : 'Mark up, then reveal answer';
+    statusPill.style.color = markupAnswerRevealed ? '#10b981' : '';
+  }
+}
+
+function renderAnswerOverlay() {
+  if (!markupEngine || !markupEngine.ctx || !markupAnswerRevealed) return;
+
+  const challengeId = document.getElementById('markupChallengeSelect');
+  if (!challengeId) return;
+  const challenge = MARKUP_CHALLENGES.find(c => c.id === challengeId.value);
+  if (!challenge || !challenge.answer) return;
+
+  const ctx = markupEngine.ctx;
+  const w = markupEngine.width;
+  const h = markupEngine.height;
+  const chartWidth = w - 75;
+  const chartHeight = h - 35;
+
+  const allCandles = markupEngine.getVisibleCandles();
+  if (!allCandles || allCandles.length === 0) return;
+
+  const endIndex = Math.max(0, allCandles.length - 1 - markupEngine.panOffsetBars);
+  const startIndex = Math.max(0, endIndex - markupEngine.visibleBarsCount + 1);
+  const visibleCandles = allCandles.slice(startIndex, endIndex + 1);
+  if (visibleCandles.length === 0) return;
+
+  const { minPrice, maxPrice } = markupEngine.calculatePriceRange(visibleCandles);
+
+  let visLow = Infinity, visHigh = -Infinity;
+  visibleCandles.forEach(c => {
+    if (c.low < visLow) visLow = c.low;
+    if (c.high > visHigh) visHigh = c.high;
+  });
+
+  ctx.save();
+
+  challenge.answer.drawings.forEach(shape => {
+    if (shape.type === 'liquidity') {
+      const price = shape.priceLevel === 'high' ? visHigh : visLow;
+      const y = markupEngine.priceToY(price, minPrice, maxPrice);
+      const x1 = (shape.barRange ? shape.barRange[0] : 0) * chartWidth;
+      const x2 = (shape.barRange ? shape.barRange[1] : 1) * chartWidth;
+
+      ctx.strokeStyle = shape.color || '#fbbf24';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([8, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x1, y);
+      ctx.lineTo(x2, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = shape.color || '#fbbf24';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('✅ ' + shape.label, x1 + 6, y - 8);
+
+    } else if (shape.type === 'fvg') {
+      const x1 = (shape.barRange ? shape.barRange[0] : 0.3) * chartWidth;
+      const x2 = (shape.barRange ? shape.barRange[1] : 0.5) * chartWidth;
+
+      const fvgStartIdx = Math.floor(shape.barRange[0] * visibleCandles.length);
+      const fvgEndIdx = Math.min(visibleCandles.length - 1, Math.floor(shape.barRange[1] * visibleCandles.length));
+      let fvgHigh = -Infinity, fvgLow = Infinity;
+      for (let i = fvgStartIdx; i <= fvgEndIdx; i++) {
+        if (visibleCandles[i]) {
+          if (visibleCandles[i].high > fvgHigh) fvgHigh = visibleCandles[i].high;
+          if (visibleCandles[i].low < fvgLow) fvgLow = visibleCandles[i].low;
+        }
+      }
+
+      const fvgRange = fvgHigh - fvgLow;
+      const isBearish = shape.direction === 'bearish';
+      const fvgTop = isBearish ? fvgHigh - fvgRange * 0.2 : fvgLow + fvgRange * 0.5;
+      const fvgBot = isBearish ? fvgHigh - fvgRange * 0.5 : fvgLow + fvgRange * 0.2;
+
+      const yTop = markupEngine.priceToY(fvgTop, minPrice, maxPrice);
+      const yBot = markupEngine.priceToY(fvgBot, minPrice, maxPrice);
+
+      ctx.fillStyle = isBearish ? 'rgba(239, 68, 68, 0.22)' : 'rgba(16, 185, 129, 0.22)';
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 2;
+      ctx.fillRect(x1, Math.min(yTop, yBot), x2 - x1, Math.abs(yBot - yTop));
+      ctx.strokeRect(x1, Math.min(yTop, yBot), x2 - x1, Math.abs(yBot - yTop));
+
+      const midY = (yTop + yBot) / 2;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.moveTo(x1, midY);
+      ctx.lineTo(x2, midY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText('✅ ' + (isBearish ? 'Bearish' : 'Bullish') + ' FVG (50% CE)', x1 + 6, Math.min(yTop, yBot) - 6);
+
+    } else if (shape.type === 'mss') {
+      const x = (shape.barPosition || 0.5) * chartWidth;
+
+      ctx.strokeStyle = shape.color || '#ef4444';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, chartHeight);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('✅ ' + shape.label, x + 6, 46);
+
+    } else if (shape.type === 'entry') {
+      const x = (shape.barPosition || 0.6) * chartWidth;
+      const isLong = shape.direction === 'long';
+
+      ctx.fillStyle = isLong ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+      ctx.fillRect(x - 4, 55, 8, 20);
+
+      ctx.fillStyle = isLong ? '#10b981' : '#ef4444';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('✅ ' + shape.label, x + 12, 70);
+    }
+  });
+
+  ctx.fillStyle = 'rgba(245, 158, 11, 0.12)';
+  ctx.fillRect(0, 0, chartWidth, 28);
+  ctx.fillStyle = '#fbbf24';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('✅ CORRECT ANSWER OVERLAY — Compare with your markup', chartWidth / 2, 18);
+  ctx.textAlign = 'left';
+
+  ctx.restore();
 }
