@@ -65,6 +65,11 @@
       this.pinchStartBarsCount = 55;
       this.lastTouchCount = 0;
 
+      // High-performance RAF render queue (prevents 120Hz touch event flooding & frame drops on iPad)
+      this.rafId = null;
+      this._cachedCandles = null;
+      this._cachedCandlesKey = '';
+
       // Replay Account & Positions
       this.account = {
         startingBalance: 25000.00,
@@ -186,6 +191,7 @@
     }
 
     loadScenario(scenarioId) {
+      this.clearCandleCache();
       this.scenario = window.REPLAY_SCENARIOS.getById(scenarioId);
       this.raw1m = this.scenario.raw1m || [];
       // Set starting playback index to Day-Of morning (~09:15 AM NY)
@@ -354,9 +360,29 @@
       this.notifyState();
     }
 
+    clearCandleCache() {
+      this._cachedCandles = null;
+      this._cachedCandlesKey = '';
+    }
+
+    requestRender() {
+      if (!this.rafId) {
+        this.rafId = requestAnimationFrame(() => {
+          this.rafId = null;
+          this.render();
+        });
+      }
+    }
+
     getVisibleCandles() {
-      const sliced1m = this.raw1m.slice(0, this.current1mIndex + 1);
-      return window.REPLAY_SCENARIOS.aggregate(sliced1m, this.activeTf);
+      const cacheKey = `${this.current1mIndex}_${this.activeTf}_${this.raw1m ? this.raw1m.length : 0}`;
+      if (this._cachedCandles && this._cachedCandlesKey === cacheKey) {
+        return this._cachedCandles;
+      }
+      const sliced1m = this.raw1m ? this.raw1m.slice(0, this.current1mIndex + 1) : [];
+      this._cachedCandles = window.REPLAY_SCENARIOS ? window.REPLAY_SCENARIOS.aggregate(sliced1m, this.activeTf) : [];
+      this._cachedCandlesKey = cacheKey;
+      return this._cachedCandles;
     }
 
     getCurrentPrice() {
@@ -843,7 +869,7 @@
             const pinchRatio = this.pinchStartDist / curDist;
             const newBarsCount = Math.round(this.pinchStartBarsCount * pinchRatio);
             this.visibleBarsCount = Math.max(10, Math.min(2600, newBarsCount));
-            this.render();
+            this.requestRender();
           }
           return;
         }
@@ -854,30 +880,54 @@
         }
 
         const pos = getPos(e);
-        const visibleCandles = this.getVisibleCandlesSlice();
-        const { minPrice, maxPrice } = this.calculatePriceRange(visibleCandles);
-        const priceInfo = this.screenToPrice(pos.x, pos.y, minPrice, maxPrice);
 
-        const barWidth = this.getBarWidth();
-        const slot = Math.floor(pos.x / barWidth);
-        let candle = null;
-        for (let i = 0; i < visibleCandles.length; i++) {
-          if (this.getCandleSlot(i, visibleCandles.length) === slot) {
-            candle = visibleCandles[i];
-            break;
+        // 1. FAST PATH: Chart Panning (Left/Right across time, Up/Down across price)
+        // High-frequency touch pan: bypass cursor tooltip, candle slot iteration, and extra allocations
+        if (this.isPanning) {
+          const barWidth = this.getBarWidth();
+          const dx = pos.x - this.panStartX;
+          const dy = pos.y - this.panStartY;
+          const barDelta = Math.round(dx / barWidth);
+          const allCandles = this.getVisibleCandles();
+          const totalCandles = allCandles ? allCandles.length : 0;
+          const maxPan = Math.max(0, totalCandles - 1);
+
+          // Horizontal pan:
+          this.panOffsetBars = Math.min(maxPan, Math.max(-25, this.panStartOffset + barDelta));
+
+          // Vertical pan:
+          const chartHeight = this.height - 35;
+          const priceSpan = this.panStartPriceMax - this.panStartPriceMin;
+          if (priceSpan > 0 && chartHeight > 0) {
+            const priceShift = (dy / chartHeight) * priceSpan;
+            this.priceScaleMode = 'manual';
+            this.manualPriceMin = this.panStartPriceMin + priceShift;
+            this.manualPriceMax = this.panStartPriceMax + priceShift;
           }
+
+          this.requestRender();
+          return;
         }
 
-        this.cursorPos = {
-          x: pos.x,
-          y: pos.y,
-          price: priceInfo.price,
-          time: candle ? candle.time : priceInfo.time,
-          candle: candle
-        };
+        // 2. FAST PATH: Price axis dragging (vertical scale zoom)
+        if (this.priceScaleDragging) {
+          const dy = pos.y - this.priceScaleDragStartY;
+          const range = this.priceScaleDragStartMax - this.priceScaleDragStartMin;
+          const midPrice = (this.priceScaleDragStartMin + this.priceScaleDragStartMax) / 2;
+          const scaleFactor = Math.max(0.05, Math.min(10.0, 1 + dy / 150));
+          const newRange = range * scaleFactor;
+          this.priceScaleMode = 'manual';
+          this.manualPriceMin = midPrice - newRange / 2;
+          this.manualPriceMax = midPrice + newRange / 2;
+          this.requestRender();
+          return;
+        }
 
-        // 1. Dragging an interactive handle or shape
+        // 3. FAST PATH: Dragging an interactive handle or position tool
         if (this.isDraggingHandle && this.activeDragHandle) {
+          const visibleCandles = this.getVisibleCandlesSlice();
+          const { minPrice, maxPrice } = this.calculatePriceRange(visibleCandles);
+          const priceInfo = this.screenToPrice(pos.x, pos.y, minPrice, maxPrice);
           const { shape, handleType } = this.activeDragHandle;
           const snap = this.dragStartShapeSnapshot;
           const dx = pos.x - this.dragStartPos.x;
@@ -939,66 +989,36 @@
             shape.startPrice = priceInfo.price;
           }
 
-          this.render();
+          this.requestRender();
           return;
         }
 
-        // 2. Price axis dragging (vertical scale zoom)
-        if (this.priceScaleDragging) {
-          const dy = pos.y - this.priceScaleDragStartY;
-          const range = this.priceScaleDragStartMax - this.priceScaleDragStartMin;
-          const midPrice = (this.priceScaleDragStartMin + this.priceScaleDragStartMax) / 2;
-          const scaleFactor = Math.max(0.05, Math.min(10.0, 1 + dy / 150));
-          const newRange = range * scaleFactor;
-          this.priceScaleMode = 'manual';
-          this.manualPriceMin = midPrice - newRange / 2;
-          this.manualPriceMax = midPrice + newRange / 2;
-          this.render();
-          return;
-        }
+        // 4. Free Hover / Pointer Move (only when NOT dragging or panning)
+        const visibleCandles = this.getVisibleCandlesSlice();
+        const { minPrice, maxPrice } = this.calculatePriceRange(visibleCandles);
+        const priceInfo = this.screenToPrice(pos.x, pos.y, minPrice, maxPrice);
 
-        // 3. Smooth 2D Chart Panning (Left/Right across time, Up/Down across price)
-        if (this.isPanning) {
-          const dx = pos.x - this.panStartX;
-          const dy = pos.y - this.panStartY;
-          const barDelta = Math.round(dx / barWidth);
-          const allCandles = this.getVisibleCandles();
-          const totalCandles = allCandles.length;
-          const maxPan = Math.max(0, totalCandles - 1);
-
-          // Horizontal pan:
-          this.panOffsetBars = Math.min(maxPan, Math.max(-25, this.panStartOffset + barDelta));
-
-          // Vertical pan:
-          // Clamped so user can pan freely but candles never vanish into the void
-          const chartHeight = this.height - 35;
-          const priceSpan = this.panStartPriceMax - this.panStartPriceMin;
-          if (priceSpan > 0 && chartHeight > 0) {
-            const priceShift = (dy / chartHeight) * priceSpan;
-            let cMin = Infinity, cMax = -Infinity;
-            visibleCandles.forEach(c => {
-              if (c.low < cMin) cMin = c.low;
-              if (c.high > cMax) cMax = c.high;
-            });
-            if (cMin !== Infinity && cMax !== -Infinity) {
-              const span = (cMax - cMin) || 50;
-              const maxAllowedShift = span * 1.5;
-              const clampedShift = Math.max(-maxAllowedShift, Math.min(maxAllowedShift, priceShift));
-              this.priceScaleMode = 'manual';
-              this.manualPriceMin = this.panStartPriceMin + clampedShift;
-              this.manualPriceMax = this.panStartPriceMax + clampedShift;
-            } else {
-              this.priceScaleMode = 'manual';
-              this.manualPriceMin = this.panStartPriceMin + priceShift;
-              this.manualPriceMax = this.panStartPriceMax + priceShift;
-            }
+        const barWidth = this.getBarWidth();
+        const slot = Math.floor(pos.x / barWidth);
+        let candle = null;
+        if (visibleCandles.length > 0) {
+          const rightMargin = Math.max(0, -this.panOffsetBars);
+          const rightSlot = this.visibleBarsCount - 1 - rightMargin;
+          const candleIdx = slot - rightSlot + visibleCandles.length - 1;
+          if (candleIdx >= 0 && candleIdx < visibleCandles.length) {
+            candle = visibleCandles[candleIdx];
           }
-
-          this.render();
-          return;
         }
 
-        // 4. Drawing new shape
+        this.cursorPos = {
+          x: pos.x,
+          y: pos.y,
+          price: priceInfo.price,
+          time: candle ? candle.time : priceInfo.time,
+          candle: candle
+        };
+
+        // 5. Drawing new shape
         if (this.isDrawing && this.currentShape) {
           this.currentShape.endX = pos.x;
           this.currentShape.endY = pos.y;
@@ -1010,7 +1030,7 @@
           }
         }
 
-        this.render();
+        this.requestRender();
       };
 
       const onPointerUp = (e) => {
@@ -1019,6 +1039,10 @@
             this.isPinching = false;
           }
           return;
+        }
+        if (this.rafId) {
+          cancelAnimationFrame(this.rafId);
+          this.rafId = null;
         }
         this.isPinching = false;
         this.isPanning = false;
@@ -1051,10 +1075,17 @@
           if (finishedShape.type === 'trendline' || finishedShape.type === 'liquidity') {
             this.openLineLabelModal(finishedShape);
           }
+          return;
         }
+
+        this.render();
       };
 
       const onPointerLeave = () => {
+        if (this.rafId) {
+          cancelAnimationFrame(this.rafId);
+          this.rafId = null;
+        }
         this.cursorPos = null;
         this.isPinching = false;
         this.isPanning = false;
@@ -1096,7 +1127,7 @@
           this.priceScaleMode = 'manual';
           this.manualPriceMin = mid - newRange / 2;
           this.manualPriceMax = mid + newRange / 2;
-          this.render();
+          this.requestRender();
           return;
         }
 
@@ -1105,7 +1136,7 @@
         if (e.deltaY < 0) this.visibleBarsCount = Math.max(10, this.visibleBarsCount - zoomDelta);
         else this.visibleBarsCount = Math.min(2600, this.visibleBarsCount + zoomDelta);
 
-        this.render();
+        this.requestRender();
       }, { passive: false });
 
       // Double-click on chart: if clicking on a line or text handle -> edit label; otherwise reset zoom
@@ -2331,7 +2362,7 @@
           candle: candle
         };
         this.cursorTimestamp = this.cursorPos.time;
-        this.render();
+        this.requestRender();
       };
 
       const onLeave = () => {
