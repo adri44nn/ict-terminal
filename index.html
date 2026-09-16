@@ -12,7 +12,7 @@
   <meta name="theme-color" content="#0a0e17">
   <link rel="manifest" href="manifest.json?v=5.0">
   <title>PB Trades ICT Replay Backtester & Academy</title>
-  <link rel="stylesheet" href="styles.css?v=6.3">
+  <link rel="stylesheet" href="styles.css?v=6.4">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230a0e17%22/><text x=%2250%22 y=%2270%22 font-size=%2265%22 text-anchor=%22middle%22>⚡</text></svg>">
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -174,6 +174,7 @@
           <button class="tool-btn" data-tool="zoom_reset" id="toolZoomResetBtn" title="Reset View (0)">↺</button>
           <button class="tool-btn" data-tool="undo" id="toolUndoBtn" title="Undo Last Drawing">↩️</button>
           <button class="tool-btn" data-tool="clear" title="Clear All Drawings">🗑️</button>
+          <button class="tool-btn" id="toolFullscreenBtn" title="Toggle Fullscreen Focused Chart (F)">⛶ Full</button>
         </div>
 
         <!-- CANVAS CHART AREA (SUPPORTS DUAL SPLIT VIEW FOR SMT ANALYSIS) -->
@@ -187,6 +188,16 @@
               <button class="player-btn play-btn" id="replayPlayPauseBtn" title="Play/Pause Replay (Spacebar)">▶ Play</button>
               <button class="player-btn" id="replayStepForwardBtn" title="Step Forward 1 Candle (Right Arrow)">Step ▶️</button>
               <button class="player-btn" id="replayJumpEndBtn" title="Jump to End">⏭️</button>
+            </div>
+
+            <!-- Focused Fullscreen Timeframe Selector Pills -->
+            <div class="fs-tf-selector" id="fsTfSelector">
+              <span class="fs-label">TF:</span>
+              <button class="fs-tf-chip" data-tf="1m">1m</button>
+              <button class="fs-tf-chip active" data-tf="5m">5m</button>
+              <button class="fs-tf-chip" data-tf="15m">15m</button>
+              <button class="fs-tf-chip" data-tf="1h">1h</button>
+              <button class="fs-tf-chip" data-tf="1d">Daily</button>
             </div>
 
             <!-- Speed Multiplier -->
@@ -203,6 +214,33 @@
               <input type="range" id="replayScrubber" min="0" max="100" value="20" class="timeline-slider">
               <div class="replay-time-readout" id="replayTimeReadout">09:30:00 NY</div>
             </div>
+
+            <!-- Fullscreen Header Actions (Trade HUD Toggle + Exit Fullscreen) -->
+            <div class="fs-header-actions">
+              <button class="player-btn fs-order-toggle-btn" id="fsOrderHudToggleBtn" title="Toggle Quick Order Execution HUD">⚡ Trade HUD</button>
+              <button class="player-btn fs-toggle-btn" id="replayFullscreenToggleBtn" title="Toggle Fullscreen Focus Mode (F)">⛶ Fullscreen</button>
+            </div>
+          </div>
+
+          <!-- COMPACT FLOATING EXECUTION HUD (FOR FULLSCREEN & FOCUS MODE) -->
+          <div class="replay-exec-hud" id="replayExecHud">
+            <div class="exec-hud-badge" id="fsExecPriceBadge">--</div>
+            <div class="exec-hud-group">
+              <label>Qty:</label>
+              <input type="number" id="fsOrderSizeInput" value="1" min="1" max="50" class="exec-hud-input">
+            </div>
+            <div class="exec-hud-group">
+              <label>SL:</label>
+              <input type="number" id="fsOrderSlInput" step="0.25" placeholder="SL" class="exec-hud-input">
+            </div>
+            <div class="exec-hud-group">
+              <label>TP:</label>
+              <input type="number" id="fsOrderTpInput" step="0.25" placeholder="TP" class="exec-hud-input">
+            </div>
+            <button class="btn btn-buy btn-sm" id="fsBuyBtn" title="Instant Buy / Long (Hotkey: B)">🟢 BUY</button>
+            <button class="btn btn-sell btn-sm" id="fsSellBtn" title="Instant Sell / Short (Hotkey: S)">🔴 SELL</button>
+            <button class="btn btn-secondary btn-xs" id="fsBracketSyncBtn" title="Snap Stop Loss & Take Profit from on-chart position bracket">🎯 Snap Bracket</button>
+            <div class="exec-hud-pnl" id="fsMiniPnlDisplay" title="Current open positions and P&L">0 Pos</div>
           </div>
 
           <div class="replay-charts-container layout-single" id="replayChartsContainer">
@@ -748,11 +786,11 @@
   <div class="toast-notification" id="toastBox">Notification</div>
 
   <!-- LOAD SCRIPTS IN ORDER -->
-  <script src="pb_academy_data.js?v=9.7"></script>
-  <script src="academy_data.js?v=9.7"></script>
-  <script src="replay_scenarios_data.js?v=9.7"></script>
-  <script src="engine.js?v=9.7"></script>
-  <script src="replay_engine.js?v=9.7"></script>
-  <script src="app.js?v=9.7"></script>
+  <script src="pb_academy_data.js?v=9.8"></script>
+  <script src="academy_data.js?v=9.8"></script>
+  <script src="replay_scenarios_data.js?v=9.8"></script>
+  <script src="engine.js?v=9.8"></script>
+  <script src="replay_engine.js?v=9.8"></script>
+  <script src="app.js?v=9.8"></script>
 </body>
 </html>

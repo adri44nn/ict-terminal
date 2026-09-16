@@ -2292,6 +2292,9 @@ function initReplayBacktester() {
     } else if (e.code === 'KeyS') {
       e.preventDefault();
       executeReplayOrder('SELL');
+    } else if (e.code === 'KeyF' || (e.code === 'KeyF' && !e.metaKey && !e.ctrlKey)) {
+      e.preventDefault();
+      toggleReplayFullscreen();
     } else if (e.key === '+' || e.key === '=') {
       e.preventDefault();
       engine.zoomIn();
@@ -2305,7 +2308,62 @@ function initReplayBacktester() {
     }
   });
 
-  // 7. Order Execution Controls
+  // 7. Fullscreen Focus Mode & Execution HUD
+  function toggleReplayFullscreen() {
+    const isFs = document.body.classList.toggle('replay-fullscreen-mode');
+    const fsToggleBtn = document.getElementById('replayFullscreenToggleBtn');
+    const toolFsBtn = document.getElementById('toolFullscreenBtn');
+
+    if (fsToggleBtn) {
+      fsToggleBtn.textContent = isFs ? '❌ Exit Focus' : '⛶ Fullscreen';
+      fsToggleBtn.classList.toggle('active', isFs);
+    }
+    if (toolFsBtn) {
+      toolFsBtn.classList.toggle('active', isFs);
+    }
+
+    // Resize canvas to fill full screen immediately
+    setTimeout(() => {
+      engine.resize();
+      engine.render();
+    }, 60);
+
+    showToast(isFs ? "⛶ Fullscreen Focus Mode: Chart + Tools + TF + Replay Controls" : "Exited Fullscreen Focus Mode");
+  }
+
+  const fsToggleBtn = document.getElementById('replayFullscreenToggleBtn');
+  if (fsToggleBtn) fsToggleBtn.addEventListener('click', toggleReplayFullscreen);
+
+  const toolFsBtn = document.getElementById('toolFullscreenBtn');
+  if (toolFsBtn) toolFsBtn.addEventListener('click', toggleReplayFullscreen);
+
+  // Fullscreen Floating Execution HUD Toggle
+  const fsOrderHudToggleBtn = document.getElementById('fsOrderHudToggleBtn');
+  const replayExecHud = document.getElementById('replayExecHud');
+  if (fsOrderHudToggleBtn && replayExecHud) {
+    fsOrderHudToggleBtn.addEventListener('click', () => {
+      const isHidden = replayExecHud.style.display === 'none';
+      replayExecHud.style.display = isHidden ? 'flex' : 'none';
+      fsOrderHudToggleBtn.classList.toggle('active', isHidden);
+    });
+  }
+
+  // Sync Fullscreen Timeframe Selector Chips
+  const fsTfChips = document.querySelectorAll('.fs-tf-chip');
+  fsTfChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      fsTfChips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const tf = chip.getAttribute('data-tf');
+      engine.setTimeframe(tf);
+
+      // Sync top strip tf buttons
+      const tfPills = document.querySelectorAll('#replayTfPills .pill-btn');
+      tfPills.forEach(p => p.classList.toggle('active', p.getAttribute('data-tf') === tf));
+    });
+  });
+
+  // 8. Order Execution Controls
   let activeOrderType = 'MARKET';
   document.querySelectorAll('.order-type-toggle .toggle-pill').forEach(pill => {
     pill.addEventListener('click', () => {
@@ -2324,10 +2382,19 @@ function initReplayBacktester() {
   });
 
   function executeReplayOrder(side) {
-    const size = parseInt(document.getElementById('orderSizeInput').value, 10) || 1;
+    // Read from sidebar or HUD inputs
+    const hudSizeInput = document.getElementById('fsOrderSizeInput');
+    const hudSlInput = document.getElementById('fsOrderSlInput');
+    const hudTpInput = document.getElementById('fsOrderTpInput');
+
+    const sidebarSizeInput = document.getElementById('orderSizeInput');
+    const sidebarSlInput = document.getElementById('orderSlInput');
+    const sidebarTpInput = document.getElementById('orderTpInput');
+
+    const size = (hudSizeInput && parseInt(hudSizeInput.value, 10)) || (sidebarSizeInput && parseInt(sidebarSizeInput.value, 10)) || 1;
     const limitPrice = activeOrderType === 'LIMIT' ? parseFloat(document.getElementById('orderLimitPriceInput').value) : null;
-    const sl = parseFloat(document.getElementById('orderSlInput').value) || null;
-    const tp = parseFloat(document.getElementById('orderTpInput').value) || null;
+    const sl = (hudSlInput && parseFloat(hudSlInput.value)) || (sidebarSlInput && parseFloat(sidebarSlInput.value)) || null;
+    const tp = (hudTpInput && parseFloat(hudTpInput.value)) || (sidebarTpInput && parseFloat(sidebarTpInput.value)) || null;
 
     engine.placeOrder({
       type: activeOrderType,
@@ -2346,31 +2413,45 @@ function initReplayBacktester() {
   const sellBtn = document.getElementById('replaySellBtn');
   if (sellBtn) sellBtn.addEventListener('click', () => executeReplayOrder('SELL'));
 
-  // Sync Long/Short Position tool bracket from chart to order inputs
-  const applyBracketBtn = document.getElementById('applyBracketToOrderBtn');
-  if (applyBracketBtn) {
-    applyBracketBtn.addEventListener('click', () => {
-      const posShape = [...engine.drawings].reverse().find(s => s.type === 'long_pos' || s.type === 'short_pos');
-      if (posShape) {
-        const isLong = posShape.type === 'long_pos';
-        const entryPrice = posShape.entryPrice || posShape.startPrice;
-        const tpPrice = posShape.tpPrice;
-        const slPrice = posShape.slPrice;
+  const fsBuyBtn = document.getElementById('fsBuyBtn');
+  if (fsBuyBtn) fsBuyBtn.addEventListener('click', () => executeReplayOrder('BUY'));
 
-        const slInput = document.getElementById('orderSlInput');
-        const tpInput = document.getElementById('orderTpInput');
-        const limitInput = document.getElementById('orderLimitPriceInput');
+  const fsSellBtn = document.getElementById('fsSellBtn');
+  if (fsSellBtn) fsSellBtn.addEventListener('click', () => executeReplayOrder('SELL'));
 
-        if (slInput) slInput.value = slPrice ? slPrice.toFixed(2) : '';
-        if (tpInput) tpInput.value = tpPrice ? tpPrice.toFixed(2) : '';
-        if (limitInput) limitInput.value = entryPrice.toFixed(2);
+  // Sync Long/Short Position tool bracket from chart to order inputs (both sidebar & HUD)
+  function syncBracketToInputs() {
+    const posShape = [...engine.drawings].reverse().find(s => s.type === 'long_pos' || s.type === 'short_pos');
+    if (posShape) {
+      const isLong = posShape.type === 'long_pos';
+      const entryPrice = posShape.entryPrice || posShape.startPrice;
+      const tpPrice = posShape.tpPrice;
+      const slPrice = posShape.slPrice;
 
-        showToast(`🎯 Applied Chart ${isLong ? 'Long' : 'Short'} Bracket (Entry: ${entryPrice.toFixed(2)} | SL: ${slPrice.toFixed(2)} | TP: ${tpPrice.toFixed(2)})`);
-      } else {
-        showToast("ℹ️ Draw a Long (🟢 Long) or Short (🔴 Short) position tool on the chart first!");
-      }
-    });
+      const slInput = document.getElementById('orderSlInput');
+      const tpInput = document.getElementById('orderTpInput');
+      const limitInput = document.getElementById('orderLimitPriceInput');
+
+      if (slInput) slInput.value = slPrice ? slPrice.toFixed(2) : '';
+      if (tpInput) tpInput.value = tpPrice ? tpPrice.toFixed(2) : '';
+      if (limitInput) limitInput.value = entryPrice.toFixed(2);
+
+      const fsSlInput = document.getElementById('fsOrderSlInput');
+      const fsTpInput = document.getElementById('fsOrderTpInput');
+      if (fsSlInput) fsSlInput.value = slPrice ? slPrice.toFixed(2) : '';
+      if (fsTpInput) fsTpInput.value = tpPrice ? tpPrice.toFixed(2) : '';
+
+      showToast(`🎯 Applied Chart ${isLong ? 'Long' : 'Short'} Bracket (Entry: ${entryPrice.toFixed(2)} | SL: ${slPrice.toFixed(2)} | TP: ${tpPrice.toFixed(2)})`);
+    } else {
+      showToast("ℹ️ Draw a Long (🟢 Long) or Short (🔴 Short) position tool on the chart first!");
+    }
   }
+
+  const applyBracketBtn = document.getElementById('applyBracketToOrderBtn');
+  if (applyBracketBtn) applyBracketBtn.addEventListener('click', syncBracketToInputs);
+
+  const fsBracketSyncBtn = document.getElementById('fsBracketSyncBtn');
+  if (fsBracketSyncBtn) fsBracketSyncBtn.addEventListener('click', syncBracketToInputs);
 
   const resetAcctBtn = document.getElementById('replayResetAccountBtn');
   if (resetAcctBtn) {
@@ -2410,6 +2491,17 @@ function initReplayBacktester() {
     const priceBadge = document.getElementById('replayCurrentPriceBadge');
     if (priceBadge) {
       priceBadge.textContent = state.currentPrice ? state.currentPrice.toFixed(2) : '--';
+    }
+    const fsPriceBadge = document.getElementById('fsExecPriceBadge');
+    if (fsPriceBadge) {
+      fsPriceBadge.textContent = state.currentPrice ? `${state.currentPrice.toFixed(2)}` : '--';
+    }
+
+    // Sync Fullscreen TF selector
+    if (state.activeTf) {
+      document.querySelectorAll('.fs-tf-chip').forEach(c => {
+        c.classList.toggle('active', c.getAttribute('data-tf') === state.activeTf);
+      });
     }
 
     // Update Time Readout
@@ -2463,6 +2555,16 @@ function initReplayBacktester() {
       pnlEl.style.color = pnl >= 0 ? 'var(--bullish)' : 'var(--bearish)';
     }
     if (winRateEl) winRateEl.textContent = `${state.stats.winRate}% (${state.stats.wins}W / ${state.stats.losses}L)`;
+
+    // Update Mini HUD PnL
+    const fsPnl = document.getElementById('fsMiniPnlDisplay');
+    if (fsPnl && state.account) {
+      const openCount = (state.account.openPositions || []).length;
+      let totalUnrealized = 0;
+      (state.account.openPositions || []).forEach(p => totalUnrealized += (p.unrealizedPnL || 0));
+      fsPnl.textContent = openCount > 0 ? `${openCount} Open (${totalUnrealized >= 0 ? '+' : ''}$${totalUnrealized.toFixed(1)})` : '0 Pos';
+      fsPnl.style.color = totalUnrealized >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+    }
 
     // Render Active Positions in Mini Sidebar
     renderReplayActivePositions(state.account.openPositions);
