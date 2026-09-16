@@ -2090,12 +2090,14 @@ function initReplayBacktester() {
   }
 
   // 2b. Dual-Chart Layout Mode Pills (Single, Dual Side-by-Side SMT, Stacked)
-  const layoutPills = document.querySelectorAll('#replayLayoutPills .pill-btn');
-  layoutPills.forEach(btn => {
+  const allLayoutBtns = document.querySelectorAll('#replayLayoutPills .pill-btn, #fsLayoutPills .pill-btn');
+  allLayoutBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      layoutPills.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
       const layoutMode = btn.getAttribute('data-layout');
+      allLayoutBtns.forEach(b => {
+        if (b.getAttribute('data-layout') === layoutMode) b.classList.add('active');
+        else b.classList.remove('active');
+      });
       engine.setLayoutMode(layoutMode);
       showToast(`Switched layout to ${layoutMode === 'dual' ? 'Side-by-Side (SMT Mode)' : (layoutMode === 'stacked' ? 'Stacked View' : 'Single Chart')}`);
     });

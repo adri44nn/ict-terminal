@@ -28,6 +28,25 @@
       this.secondaryHeight = 0;
       this.cursorTimestamp = null; // Synchronized across both charts
 
+      // Secondary SMT Vertical Price Scale & Gesture State
+      this.secondaryPriceScaleMode = 'auto';
+      this.secondaryManualPriceMin = 0;
+      this.secondaryManualPriceMax = 0;
+      this.secondaryPriceScaleDragging = false;
+      this.secondaryPriceScaleDragStartY = 0;
+      this.secondaryPriceScaleDragStartMin = 0;
+      this.secondaryPriceScaleDragStartMax = 0;
+      this.secondaryPanStartY = 0;
+      this.secondaryPanStartPriceMin = 0;
+      this.secondaryPanStartPriceMax = 0;
+      this.secondaryIsPanning = false;
+      this.secondaryPanStartX = 0;
+      this.secondaryPanStartOffset = 0;
+      this.secondaryIsPinching = false;
+      this.secondaryPinchStartDist = 0;
+      this.secondaryPinchStartBarsCount = 55;
+      this.secondaryCursorPos = null;
+
       // Chart Drawing & View State
       this.drawings = [];
       this.activeTool = 'pointer';
@@ -69,6 +88,8 @@
       this.rafId = null;
       this._cachedCandles = null;
       this._cachedCandlesKey = '';
+      this._cachedSecCandles = null;
+      this._cachedSecCandlesKey = '';
 
       // Replay Account & Positions
       this.account = {
@@ -166,14 +187,17 @@
     }
 
     setSecondarySymbol(sym) {
+      this.clearCandleCache();
       this.secondarySymbol = sym;
       const tag = document.getElementById('secondaryPaneTag');
       if (tag) tag.textContent = `🔵 SMT COMPARISON: ${sym}`;
+      this.secondaryPriceScaleMode = 'auto';
       this.render();
       this.notifyState();
     }
 
     setSecondaryTimeframe(tf) {
+      this.clearCandleCache();
       this.secondaryTf = tf;
       this.render();
       this.notifyState();
@@ -185,9 +209,16 @@
       const curTime = this.getCurrentTime();
       if (!curTime) return [];
       
+      const cacheKey = `${curTime}_${this.secondarySymbol}_${this.secondaryTf}_${raw.length}`;
+      if (this._cachedSecCandles && this._cachedSecCandlesKey === cacheKey) {
+        return this._cachedSecCandles;
+      }
+
       // Slice secondary dataset to match exact current replay timestamp
       const sliced = raw.filter(b => b.time <= curTime);
-      return window.REPLAY_SCENARIOS.aggregate(sliced, this.secondaryTf);
+      this._cachedSecCandles = window.REPLAY_SCENARIOS ? window.REPLAY_SCENARIOS.aggregate(sliced, this.secondaryTf) : [];
+      this._cachedSecCandlesKey = cacheKey;
+      return this._cachedSecCandles;
     }
 
     loadScenario(scenarioId) {
@@ -208,6 +239,9 @@
       this.priceScaleMode = 'auto';
       this.manualPriceMin = 0;
       this.manualPriceMax = 0;
+      this.secondaryPriceScaleMode = 'auto';
+      this.secondaryManualPriceMin = 0;
+      this.secondaryManualPriceMax = 0;
       this.panOffsetBars = 0;
       this.notifyState();
       this.render();
@@ -1375,8 +1409,8 @@
       return null;
     }
 
-    priceToY(price, minPrice, maxPrice) {
-      const chartHeight = this.height - 35;
+    priceToY(price, minPrice, maxPrice, customHeight) {
+      const chartHeight = customHeight !== undefined ? customHeight : (this.height - 35);
       const range = maxPrice - minPrice;
       if (range === 0) return chartHeight / 2;
       return chartHeight - ((price - minPrice) / range) * chartHeight;
@@ -1431,6 +1465,52 @@
               if (lvl > max) max = lvl;
             }
           });
+        }
+      }
+
+      const pad = (max - min) * (this.pricePadding || 0.08) || 1.0;
+      return {
+        minPrice: min - pad,
+        maxPrice: max + pad,
+        priceRange: (max + pad) - (min - pad)
+      };
+    }
+
+    priceToYSecondary(price, minPrice, maxPrice) {
+      const chartHeight = this.secondaryHeight - 35;
+      const range = maxPrice - minPrice;
+      if (range === 0) return chartHeight / 2;
+      return chartHeight - ((price - minPrice) / range) * chartHeight;
+    }
+
+    calculateSecondaryPriceRange(candles) {
+      if (!candles || candles.length === 0) {
+        return { minPrice: 5000, maxPrice: 5100, priceRange: 100 };
+      }
+
+      let min = Infinity;
+      let max = -Infinity;
+      candles.forEach(c => {
+        if (c.low < min) min = c.low;
+        if (c.high > max) max = c.high;
+      });
+
+      if (min === Infinity || max === -Infinity || isNaN(min) || isNaN(max)) {
+        min = 5000;
+        max = 5100;
+      }
+
+      if (this.secondaryPriceScaleMode === 'manual' && this.secondaryManualPriceMin < this.secondaryManualPriceMax && !isNaN(this.secondaryManualPriceMin) && !isNaN(this.secondaryManualPriceMax)) {
+        const span = (max - min) || 50;
+        const isFarAway = (this.secondaryManualPriceMax < min - span * 3) || (this.secondaryManualPriceMin > max + span * 3);
+        if (!isFarAway) {
+          return {
+            minPrice: this.secondaryManualPriceMin,
+            maxPrice: this.secondaryManualPriceMax,
+            priceRange: this.secondaryManualPriceMax - this.secondaryManualPriceMin
+          };
+        } else {
+          this.secondaryPriceScaleMode = 'auto';
         }
       }
 
@@ -1611,8 +1691,8 @@
         // Bounded High/Low Range Box (Strictly contained within this session's time window)
         // Only for Asia & London sessions
         if ((seg.key === 'asia' || seg.key === 'london') && minPrice !== undefined && maxPrice !== undefined) {
-          const yHigh = this.priceToY(seg.high, minPrice, maxPrice);
-          const yLow = this.priceToY(seg.low, minPrice, maxPrice);
+          const yHigh = this.priceToY(seg.high, minPrice, maxPrice, chartHeight);
+          const yLow = this.priceToY(seg.low, minPrice, maxPrice, chartHeight);
           const boxH = Math.max(2, Math.abs(yLow - yHigh));
           const yTop = Math.min(yHigh, yLow);
 
@@ -2198,7 +2278,30 @@
     }
 
     renderCrosshair(ctx, w, h, chartWidth, chartHeight, minPrice, maxPrice) {
-      if (!this.cursorPos) return;
+      if (!this.cursorPos) {
+        if (this.secondaryCursorPos && this.secondaryCursorPos.time) {
+          const barWidth = chartWidth / this.visibleBarsCount;
+          const allCandles = this.getVisibleCandles();
+          const endIndex = Math.max(0, allCandles.length - 1 - this.panOffsetBars);
+          const startIndex = Math.max(0, endIndex - this.visibleBarsCount + 1);
+          const visibleCandles = allCandles.slice(startIndex, endIndex + 1);
+          const matchedIdx = visibleCandles.findIndex(c => c.time === this.secondaryCursorPos.time);
+          if (matchedIdx !== -1) {
+            const slot = this.getCandleSlot(matchedIdx, visibleCandles.length);
+            const xMatch = slot * barWidth + barWidth / 2;
+            ctx.save();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(xMatch, 0);
+            ctx.lineTo(xMatch, chartHeight);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+        return;
+      }
       const { x, y, price, time } = this.cursorPos;
       if (x < 0 || x > chartWidth || y < 0 || y > chartHeight) return;
 
@@ -2258,7 +2361,13 @@
 
     renderOhlcvLegend(ctx, chartWidth, visibleCandles) {
       ctx.save();
-      const candle = (this.cursorPos && this.cursorPos.candle) ? this.cursorPos.candle : (visibleCandles[visibleCandles.length - 1]);
+      let candle = (this.cursorPos && this.cursorPos.candle) ? this.cursorPos.candle : null;
+      if (!candle && this.secondaryCursorPos && this.secondaryCursorPos.time) {
+        candle = visibleCandles.find(c => c.time === this.secondaryCursorPos.time);
+      }
+      if (!candle) {
+        candle = visibleCandles[visibleCandles.length - 1];
+      }
       if (!candle) {
         ctx.restore();
         return;
@@ -2327,10 +2436,11 @@
     }
 
     // ========================================================================
-    // SECONDARY SMT COMPARISON CHART RENDERING
+    // SECONDARY SMT COMPARISON CHART (FULL INTERACTION & SYNCED METRICS)
     // ========================================================================
     bindSecondaryEvents() {
       if (!this.secondaryCanvas) return;
+
       const getPos = (e) => {
         const rect = this.secondaryCanvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -2341,58 +2451,333 @@
         };
       };
 
-      const onMove = (e) => {
+      const getTouchDist = (touches) => {
+        if (touches.length < 2) return 0;
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.hypot(dx, dy);
+      };
+
+      const onPointerDown = (e) => {
+        if (e.touches) {
+          this.isTouchDevice = true;
+          if (e.cancelable) e.preventDefault();
+          if (e.touches.length === 2) {
+            this.secondaryIsPinching = true;
+            this.secondaryIsPanning = false;
+            this.secondaryPinchStartDist = getTouchDist(e.touches);
+            this.secondaryPinchStartBarsCount = this.visibleBarsCount;
+            return;
+          }
+          if (e.touches.length > 2) return;
+        }
+
         const pos = getPos(e);
+        const chartWidth = this.secondaryWidth - 75;
+        const secCandles = this.getSecondaryCandles();
+        const endIndex = Math.max(0, secCandles.length - 1 - this.panOffsetBars);
+        const startIndex = Math.max(0, endIndex - this.visibleBarsCount + 1);
+        const visibleCandles = secCandles.slice(startIndex, endIndex + 1);
+        const { minPrice, maxPrice } = this.calculateSecondaryPriceRange(visibleCandles);
+
+        // 1. Right Price Axis Dragging (Vertical Price Zoom on SMT Chart)
+        if (pos.x >= chartWidth) {
+          this.secondaryPriceScaleDragging = true;
+          this.secondaryPriceScaleDragStartY = pos.y;
+          this.secondaryPriceScaleDragStartMin = minPrice;
+          this.secondaryPriceScaleDragStartMax = maxPrice;
+          return;
+        }
+
+        // 2. Chart Area 2D Pan (Syncs time across both charts, pans price vertically on secondary)
+        this.secondaryIsPanning = true;
+        this.secondaryPanStartX = pos.x;
+        this.secondaryPanStartY = pos.y;
+        this.secondaryPanStartOffset = this.panOffsetBars;
+        this.secondaryPanStartPriceMin = minPrice;
+        this.secondaryPanStartPriceMax = maxPrice;
+      };
+
+      const onPointerMove = (e) => {
+        if (e.touches && e.cancelable) {
+          e.preventDefault();
+        }
+
+        // 2-Finger Pinch-to-zoom on secondary chart
+        if (e.touches && e.touches.length === 2) {
+          if (!this.secondaryIsPinching) {
+            this.secondaryIsPinching = true;
+            this.secondaryPinchStartDist = getTouchDist(e.touches);
+            this.secondaryPinchStartBarsCount = this.visibleBarsCount;
+            return;
+          }
+          const curDist = getTouchDist(e.touches);
+          if (this.secondaryPinchStartDist > 10 && curDist > 10) {
+            const pinchRatio = this.secondaryPinchStartDist / curDist;
+            const newBarsCount = Math.round(this.secondaryPinchStartBarsCount * pinchRatio);
+            this.visibleBarsCount = Math.max(10, Math.min(2600, newBarsCount));
+            this.requestRender();
+          }
+          return;
+        }
+
+        if (this.secondaryIsPinching) return;
+
+        const pos = getPos(e);
+        const chartWidth = this.secondaryWidth - 75;
+        const barWidth = chartWidth / this.visibleBarsCount;
+
+        // 1. Fast Path: Secondary Panning (Syncs time with primary chart in lockstep!)
+        if (this.secondaryIsPanning) {
+          const dx = pos.x - this.secondaryPanStartX;
+          const dy = pos.y - this.secondaryPanStartY;
+          const barDelta = Math.round(dx / barWidth);
+          const allCandles = this.getSecondaryCandles();
+          const totalCandles = allCandles ? allCandles.length : 0;
+          const maxPan = Math.max(0, totalCandles - 1);
+
+          // Horizontal pan applies to BOTH charts in synchronized lockstep:
+          this.panOffsetBars = Math.min(maxPan, Math.max(-25, this.secondaryPanStartOffset + barDelta));
+
+          // Vertical pan for secondary price:
+          const chartHeight = this.secondaryHeight - 35;
+          const priceSpan = this.secondaryPanStartPriceMax - this.secondaryPanStartPriceMin;
+          if (priceSpan > 0 && chartHeight > 0) {
+            const priceShift = (dy / chartHeight) * priceSpan;
+            this.secondaryPriceScaleMode = 'manual';
+            this.secondaryManualPriceMin = this.secondaryPanStartPriceMin + priceShift;
+            this.secondaryManualPriceMax = this.secondaryPanStartPriceMax + priceShift;
+          }
+
+          this.requestRender();
+          return;
+        }
+
+        // 2. Fast Path: Secondary Price Axis Dragging
+        if (this.secondaryPriceScaleDragging) {
+          const dy = pos.y - this.secondaryPriceScaleDragStartY;
+          const range = this.secondaryPriceScaleDragStartMax - this.secondaryPriceScaleDragStartMin;
+          const midPrice = (this.secondaryPriceScaleDragStartMin + this.secondaryPriceScaleDragStartMax) / 2;
+          const scaleFactor = Math.max(0.05, Math.min(10.0, 1 + dy / 150));
+          const newRange = range * scaleFactor;
+          this.secondaryPriceScaleMode = 'manual';
+          this.secondaryManualPriceMin = midPrice - newRange / 2;
+          this.secondaryManualPriceMax = midPrice + newRange / 2;
+          this.requestRender();
+          return;
+        }
+
+        // 3. Hover / Crosshair on Secondary Canvas
         const secCandles = this.getSecondaryCandles();
         if (!secCandles || secCandles.length === 0) return;
 
         const endIndex = Math.max(0, secCandles.length - 1 - this.panOffsetBars);
         const startIndex = Math.max(0, endIndex - this.visibleBarsCount + 1);
         const visibleCandles = secCandles.slice(startIndex, endIndex + 1);
-        const barWidth = (this.secondaryWidth - 75) / this.visibleBarsCount;
-        const barIdx = Math.floor(pos.x / barWidth);
-        const candle = (barIdx >= 0 && barIdx < visibleCandles.length) ? visibleCandles[barIdx] : null;
-        const priceInfo = this.screenToPriceSecondary(pos.x, pos.y);
+        const { minPrice, maxPrice } = this.calculateSecondaryPriceRange(visibleCandles);
 
-        this.cursorPos = {
+        const slot = Math.floor(pos.x / barWidth);
+        let candle = null;
+        if (visibleCandles.length > 0) {
+          const rightMargin = Math.max(0, -this.panOffsetBars);
+          const rightSlot = this.visibleBarsCount - 1 - rightMargin;
+          const candleIdx = slot - rightSlot + visibleCandles.length - 1;
+          if (candleIdx >= 0 && candleIdx < visibleCandles.length) {
+            candle = visibleCandles[candleIdx];
+          }
+        }
+
+        const chartHeight = this.secondaryHeight - 35;
+        const price = maxPrice - (pos.y / chartHeight) * (maxPrice - minPrice);
+
+        this.secondaryCursorPos = {
           x: pos.x,
           y: pos.y,
-          price: priceInfo.price,
-          time: candle ? candle.time : priceInfo.time,
+          price: parseFloat(price.toFixed(2)),
+          time: candle ? candle.time : null,
           candle: candle
         };
-        this.cursorTimestamp = this.cursorPos.time;
+        if (candle) {
+          this.cursorTimestamp = candle.time;
+        }
+
         this.requestRender();
       };
 
-      const onLeave = () => {
-        this.cursorPos = null;
-        this.cursorTimestamp = null;
+      const onPointerUp = (e) => {
+        if (e && e.touches && e.touches.length > 0) {
+          if (e.touches.length === 1) {
+            this.secondaryIsPinching = false;
+          }
+          return;
+        }
+        this.secondaryIsPinching = false;
+        this.secondaryIsPanning = false;
+        this.secondaryPriceScaleDragging = false;
         this.render();
       };
 
-      const onTouchMove = (e) => {
-        if (e.cancelable) e.preventDefault();
-        onMove(e);
+      const onPointerLeave = () => {
+        this.secondaryCursorPos = null;
+        this.secondaryIsPinching = false;
+        this.secondaryIsPanning = false;
+        this.secondaryPriceScaleDragging = false;
+        this.render();
       };
 
-      this.secondaryCanvas.addEventListener('mousemove', onMove);
-      this.secondaryCanvas.addEventListener('mouseleave', onLeave);
-      this.secondaryCanvas.addEventListener('touchstart', onTouchMove, { passive: false });
-      this.secondaryCanvas.addEventListener('touchmove', onTouchMove, { passive: false });
-      this.secondaryCanvas.addEventListener('touchend', onLeave);
-      this.secondaryCanvas.addEventListener('touchcancel', onLeave);
+      this.secondaryCanvas.addEventListener('mousedown', onPointerDown);
+      this.secondaryCanvas.addEventListener('mousemove', onPointerMove);
+      this.secondaryCanvas.addEventListener('mouseleave', onPointerLeave);
+      window.addEventListener('mouseup', onPointerUp);
+
+      this.secondaryCanvas.addEventListener('touchstart', onPointerDown, { passive: false });
+      this.secondaryCanvas.addEventListener('touchmove', onPointerMove, { passive: false });
+      this.secondaryCanvas.addEventListener('touchend', onPointerUp, { passive: false });
+      this.secondaryCanvas.addEventListener('touchcancel', onPointerLeave);
+
+      this.secondaryCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = this.secondaryCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const chartWidth = this.secondaryWidth - 75;
+
+        // Scrolling over price axis: vertical price zoom on secondary
+        if (mouseX >= chartWidth) {
+          const secCandles = this.getSecondaryCandles();
+          const endIndex = Math.max(0, secCandles.length - 1 - this.panOffsetBars);
+          const startIndex = Math.max(0, endIndex - this.visibleBarsCount + 1);
+          const visibleCandles = secCandles.slice(startIndex, endIndex + 1);
+          const { minPrice, maxPrice } = this.calculateSecondaryPriceRange(visibleCandles);
+          const range = maxPrice - minPrice;
+          const mid = (minPrice + maxPrice) / 2;
+          const scale = e.deltaY > 0 ? 1.15 : 0.85;
+          const newRange = range * scale;
+          this.secondaryPriceScaleMode = 'manual';
+          this.secondaryManualPriceMin = mid - newRange / 2;
+          this.secondaryManualPriceMax = mid + newRange / 2;
+          this.requestRender();
+          return;
+        }
+
+        // Scrolling over chart: horizontal bar count zoom on BOTH charts in lockstep
+        const zoomDelta = Math.max(3, Math.round(this.visibleBarsCount * 0.12));
+        if (e.deltaY < 0) this.visibleBarsCount = Math.max(10, this.visibleBarsCount - zoomDelta);
+        else this.visibleBarsCount = Math.min(2600, this.visibleBarsCount + zoomDelta);
+
+        this.requestRender();
+      }, { passive: false });
+
+      // Double-click resets secondary zoom & price scale
+      this.secondaryCanvas.addEventListener('dblclick', () => {
+        this.secondaryPriceScaleMode = 'auto';
+        this.panOffsetBars = 0;
+        this.render();
+      });
     }
 
     screenToPriceSecondary(x, y) {
       const secCandles = this.getSecondaryCandles();
-      const { minPrice, maxPrice, priceRange } = this.calculatePriceRange(secCandles);
+      const endIndex = Math.max(0, secCandles.length - 1 - this.panOffsetBars);
+      const startIndex = Math.max(0, endIndex - this.visibleBarsCount + 1);
+      const visibleCandles = secCandles.slice(startIndex, endIndex + 1);
+      const { minPrice, maxPrice, priceRange } = this.calculateSecondaryPriceRange(visibleCandles);
       const chartHeight = this.secondaryHeight - 35;
       const price = maxPrice - (y / chartHeight) * priceRange;
       const barWidth = (this.secondaryWidth - 75) / this.visibleBarsCount;
-      const barIdx = Math.floor(x / barWidth);
-      const time = secCandles[barIdx] ? secCandles[barIdx].time : this.getCurrentTime();
-      return { price: parseFloat(price.toFixed(2)), time };
+      const slot = Math.floor(x / barWidth);
+      const rightMargin = Math.max(0, -this.panOffsetBars);
+      const rightSlot = this.visibleBarsCount - 1 - rightMargin;
+      const candleIdx = slot - rightSlot + visibleCandles.length - 1;
+      const candle = (candleIdx >= 0 && candleIdx < visibleCandles.length) ? visibleCandles[candleIdx] : null;
+      return { price: parseFloat(price.toFixed(2)), time: candle ? candle.time : this.getCurrentTime() };
+    }
+
+    detectSmtDivergence(priCandles, secCandles) {
+      if (!priCandles || !secCandles || priCandles.length < 6 || secCandles.length < 6) return null;
+      const count = Math.min(20, priCandles.length, secCandles.length);
+      const priSlice = priCandles.slice(-count);
+      const secSlice = secCandles.slice(-count);
+
+      let priHighIdx = 0, priLowIdx = 0;
+      let secHighIdx = 0, secLowIdx = 0;
+
+      for (let i = 1; i < count; i++) {
+        if (priSlice[i].high > priSlice[priHighIdx].high) priHighIdx = i;
+        if (priSlice[i].low < priSlice[priLowIdx].low) priLowIdx = i;
+        if (secSlice[i].high > secSlice[secHighIdx].high) secHighIdx = i;
+        if (secSlice[i].low < secSlice[secLowIdx].low) secLowIdx = i;
+      }
+
+      // Check Bearish SMT: Primary swept high recently, but Secondary failed to make a new high
+      if (priHighIdx >= count - 4 && secHighIdx < count - 5) {
+        return {
+          type: 'bearish',
+          label: `⚡ BEARISH SMT: ${this.scenario?.symbol || 'NQ'} Swept High • ${this.secondarySymbol} Held Lower High`,
+          color: '#f43f5e'
+        };
+      }
+      // Check Bullish SMT: Primary swept low recently, but Secondary failed to make a new low (held higher low)
+      if (priLowIdx >= count - 4 && secLowIdx < count - 5) {
+        return {
+          type: 'bullish',
+          label: `⚡ BULLISH SMT: ${this.scenario?.symbol || 'NQ'} Swept Low • ${this.secondarySymbol} Held Higher Low`,
+          color: '#10b981'
+        };
+      }
+      return null;
+    }
+
+    renderSecondaryOhlcHeader(ctx, candle, w) {
+      if (!candle) return;
+      ctx.save();
+      ctx.font = "bold 11px monospace";
+      ctx.textAlign = "left";
+
+      let curX = 14;
+      const isUp = candle.close >= candle.open;
+      const changePts = (candle.close - candle.open).toFixed(2);
+      const changePct = ((candle.close - candle.open) / (candle.open || 1) * 100).toFixed(2);
+      const changeColor = isUp ? "#10b981" : "#ef4444";
+
+      // Asset Tag
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillText(`${this.secondarySymbol} • ${this.secondaryTf.toUpperCase()} SMT`, curX, 22);
+      curX += ctx.measureText(`${this.secondarySymbol} • ${this.secondaryTf.toUpperCase()} SMT`).width + 12;
+
+      // O, H, L, C
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText("O:", curX, 22);
+      curX += 16;
+      ctx.fillStyle = "#fff";
+      ctx.fillText(candle.open.toFixed(2), curX, 22);
+      curX += ctx.measureText(candle.open.toFixed(2)).width + 8;
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText("H:", curX, 22);
+      curX += 16;
+      ctx.fillStyle = "#fff";
+      ctx.fillText(candle.high.toFixed(2), curX, 22);
+      curX += ctx.measureText(candle.high.toFixed(2)).width + 8;
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText("L:", curX, 22);
+      curX += 16;
+      ctx.fillStyle = "#fff";
+      ctx.fillText(candle.low.toFixed(2), curX, 22);
+      curX += ctx.measureText(candle.low.toFixed(2)).width + 8;
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText("C:", curX, 22);
+      curX += 16;
+      ctx.fillStyle = changeColor;
+      ctx.fillText(candle.close.toFixed(2), curX, 22);
+      curX += ctx.measureText(candle.close.toFixed(2)).width + 8;
+
+      ctx.fillStyle = changeColor;
+      const changeStr = `${isUp ? '+' : ''}${changePts} (${isUp ? '+' : ''}${changePct}%)`;
+      ctx.fillText(changeStr, curX, 22);
+
+      ctx.restore();
     }
 
     renderSecondary() {
@@ -2426,34 +2811,43 @@
       const startIndex = Math.max(0, endIndex - this.visibleBarsCount + 1);
       const visibleCandles = allCandles.slice(startIndex, endIndex + 1);
 
-      const { minPrice, maxPrice } = this.calculatePriceRange(visibleCandles);
+      const { minPrice, maxPrice } = this.calculateSecondaryPriceRange(visibleCandles);
       const chartWidth = w - 75;
       const chartHeight = h - 35;
       const barWidth = chartWidth / this.visibleBarsCount;
-      const candleWidth = Math.max(2, barWidth * 0.72);
+      const candleWidth = Math.max(1, Math.min(Math.max(1, barWidth - 0.5), barWidth * 0.75));
+      const wickWidth = barWidth >= 4 ? 1.2 : (barWidth >= 2 ? 0.8 : 0.5);
 
-      // Killzone Shading
-      if (this.autoMarkup && this.overlays.killzones) {
-        this.renderKillzoneShading(ctx, visibleCandles, barWidth, chartHeight);
+      // 1. Session Background Vertical Zones & Bounded Range Boxes (Asia, London, NY AM, Silver Bullet)
+      if (this.overlays.sessions) {
+        this.renderSessionZones(ctx, visibleCandles, barWidth, chartHeight, minPrice, maxPrice);
       }
 
-      // Grid Lines
+      // 2. Grid Lines
       this.renderGrid(ctx, chartWidth, chartHeight, minPrice, maxPrice);
 
-      // Candlesticks
+      // 3. Algorithmic Overlays (FVGs & Displacement)
+      if (this.overlays.fvg) {
+        this.renderAlgorithmicOverlays(ctx, visibleCandles, barWidth, minPrice, maxPrice);
+      }
+
+      // 4. Candlesticks (Plotted accurately to synchronized timeline slots)
       visibleCandles.forEach((c, i) => {
-        const xCenter = i * barWidth + barWidth / 2;
+        const slot = this.getCandleSlot(i, visibleCandles.length);
+        if (slot < -1 || slot > this.visibleBarsCount + 1) return;
+
+        const xCenter = slot * barWidth + barWidth / 2;
         const isUp = c.close >= c.open;
         const color = isUp ? "#10b981" : "#ef4444";
         const wickColor = isUp ? "#34d399" : "#f87171";
 
-        const yOpen = this.priceToY(c.open, minPrice, maxPrice);
-        const yClose = this.priceToY(c.close, minPrice, maxPrice);
-        const yHigh = this.priceToY(c.high, minPrice, maxPrice);
-        const yLow = this.priceToY(c.low, minPrice, maxPrice);
+        const yOpen = this.priceToYSecondary(c.open, minPrice, maxPrice);
+        const yClose = this.priceToYSecondary(c.close, minPrice, maxPrice);
+        const yHigh = this.priceToYSecondary(c.high, minPrice, maxPrice);
+        const yLow = this.priceToYSecondary(c.low, minPrice, maxPrice);
 
         ctx.strokeStyle = wickColor;
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = wickWidth;
         ctx.beginPath();
         ctx.moveTo(xCenter, yHigh);
         ctx.lineTo(xCenter, yLow);
@@ -2461,11 +2855,11 @@
 
         ctx.fillStyle = color;
         const bodyTop = Math.min(yOpen, yClose);
-        const bodyHeight = Math.max(1.5, Math.abs(yOpen - yClose));
+        const bodyHeight = Math.max(1.0, Math.abs(yOpen - yClose));
         ctx.fillRect(xCenter - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
       });
 
-      // Price Scale
+      // 5. Right Price Scale
       ctx.fillStyle = "#0d131f";
       ctx.fillRect(chartWidth, 0, 75, h);
       ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
@@ -2480,14 +2874,14 @@
       const step = (maxPrice - minPrice) / 6;
       for (let i = 0; i <= 6; i++) {
         const p = minPrice + i * step;
-        const y = this.priceToY(p, minPrice, maxPrice);
+        const y = this.priceToYSecondary(p, minPrice, maxPrice);
         ctx.fillText(p.toFixed(2), chartWidth + 6, y + 4);
       }
 
       // Current Price Tag on Secondary
       if (visibleCandles.length > 0) {
         const curSecPrice = visibleCandles[visibleCandles.length - 1].close;
-        const yCur = this.priceToY(curSecPrice, minPrice, maxPrice);
+        const yCur = this.priceToYSecondary(curSecPrice, minPrice, maxPrice);
         ctx.fillStyle = "#38bdf8";
         ctx.fillRect(chartWidth, yCur - 10, 75, 20);
         ctx.fillStyle = "#0a0e17";
@@ -2495,7 +2889,7 @@
         ctx.fillText(curSecPrice.toFixed(2), chartWidth + 6, yCur + 4);
       }
 
-      // Bottom Time Axis
+      // 6. Bottom Time Axis
       ctx.fillStyle = "#0d131f";
       ctx.fillRect(0, chartHeight, w, 35);
       ctx.beginPath();
@@ -2503,19 +2897,75 @@
       ctx.lineTo(w, chartHeight);
       ctx.stroke();
 
+      const totalVis = visibleCandles.length;
+      const timeStep = totalVis > 20 ? 6 : (totalVis > 6 ? 2 : 1);
       visibleCandles.forEach((c, idx) => {
-        if (idx % 6 === 0) {
-          const x = idx * barWidth + barWidth / 2;
+        const slot = this.getCandleSlot(idx, totalVis);
+        if (slot < 0 || slot >= this.visibleBarsCount) return;
+        if (idx % timeStep === 0 || idx === totalVis - 1) {
+          const x = slot * barWidth + barWidth / 2;
           const ny = window.ICTEngine.getNyTime(c.time);
           ctx.fillText(`${ny.hour.toString().padStart(2, '0')}:${ny.minute.toString().padStart(2, '0')}`, x, chartHeight + 18);
         }
       });
 
-      // Synchronized Crosshair on Secondary Chart
-      if (this.cursorPos && this.cursorPos.time) {
+      // 7. Synchronized Crosshair on Secondary Chart
+      // A. Active crosshair if cursor is on this secondary canvas
+      if (this.secondaryCursorPos) {
+        const { x, y, price, time } = this.secondaryCursorPos;
+        if (x >= 0 && x <= chartWidth && y >= 0 && y <= chartHeight) {
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 4]);
+
+          // Vertical line
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, chartHeight);
+          ctx.stroke();
+
+          // Horizontal line
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(chartWidth, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Time Badge
+          if (time) {
+            const ny = window.ICTEngine.getNyTime(time);
+            const timeBadgeText = `${ny.month}/${ny.day} ${ny.hour.toString().padStart(2, '0')}:${ny.minute.toString().padStart(2, '0')} NY`;
+            ctx.font = "bold 11px monospace";
+            const textWidth = ctx.measureText(timeBadgeText).width;
+            const badgeW = textWidth + 14;
+            const badgeX = Math.max(0, Math.min(chartWidth - badgeW, x - badgeW / 2));
+            ctx.fillStyle = "#1e293b";
+            ctx.fillRect(badgeX, chartHeight + 4, badgeW, 22);
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 1.2;
+            ctx.strokeRect(badgeX, chartHeight + 4, badgeW, 22);
+            ctx.fillStyle = "#fff";
+            ctx.textAlign = "center";
+            ctx.fillText(timeBadgeText, badgeX + badgeW / 2, chartHeight + 19);
+          }
+
+          // Price Badge
+          const priceBadgeText = price.toFixed(2);
+          ctx.fillStyle = "#1e293b";
+          ctx.fillRect(chartWidth + 1, y - 10, 73, 20);
+          ctx.strokeStyle = "#38bdf8";
+          ctx.lineWidth = 1.2;
+          ctx.strokeRect(chartWidth + 1, y - 10, 73, 20);
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "left";
+          ctx.fillText(priceBadgeText, chartWidth + 6, y + 4);
+        }
+      } else if (this.cursorPos && this.cursorPos.time) {
+        // B. Cursor on primary chart: draw vertical synchronization line
         const matchedIdx = visibleCandles.findIndex(c => c.time === this.cursorPos.time);
         if (matchedIdx !== -1) {
-          const xMatch = matchedIdx * barWidth + barWidth / 2;
+          const slot = this.getCandleSlot(matchedIdx, visibleCandles.length);
+          const xMatch = slot * barWidth + barWidth / 2;
           ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
           ctx.setLineDash([4, 4]);
           ctx.beginPath();
@@ -2526,7 +2976,59 @@
         }
       }
 
-      // Watermark
+      // 8. Top OHLC Header on Secondary Canvas
+      let hoveredCandle = (this.secondaryCursorPos && this.secondaryCursorPos.candle) ? this.secondaryCursorPos.candle : null;
+      if (!hoveredCandle && this.cursorPos && this.cursorPos.time) {
+        hoveredCandle = visibleCandles.find(c => c.time === this.cursorPos.time);
+      }
+      if (!hoveredCandle) {
+        hoveredCandle = visibleCandles[visibleCandles.length - 1];
+      }
+      this.renderSecondaryOhlcHeader(ctx, hoveredCandle, w);
+
+      // 9. Automated Real-Time SMT Divergence Detection & Badge
+      const priCandles = this.getVisibleCandlesSlice();
+      const smtAlert = this.detectSmtDivergence(priCandles, visibleCandles);
+      if (smtAlert) {
+        ctx.save();
+        const badgeW = 360;
+        const badgeH = 26;
+        const badgeX = (chartWidth - badgeW) / 2;
+        const badgeY = 36;
+        ctx.fillStyle = smtAlert.type === 'bullish' ? 'rgba(16, 185, 129, 0.22)' : 'rgba(244, 63, 94, 0.22)';
+        ctx.strokeStyle = smtAlert.color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+        } else {
+          ctx.rect(badgeX, badgeY, badgeW, badgeH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = smtAlert.color;
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(smtAlert.label, chartWidth / 2, badgeY + 17);
+        ctx.restore();
+
+        const statusEl = document.getElementById('primaryPaneStatus');
+        if (statusEl) {
+          statusEl.textContent = smtAlert.type === 'bullish' ? '⚡ Bullish SMT Divergence' : '⚡ Bearish SMT Divergence';
+          statusEl.style.color = smtAlert.color;
+          statusEl.style.borderColor = smtAlert.color;
+        }
+      } else {
+        const statusEl = document.getElementById('primaryPaneStatus');
+        if (statusEl && statusEl.textContent !== 'Synchronized Replay') {
+          statusEl.textContent = 'Synchronized Replay';
+          statusEl.style.color = '#38bdf8';
+          statusEl.style.borderColor = 'rgba(56, 189, 248, 0.3)';
+        }
+      }
+
+      // 10. Watermark
       ctx.save();
       ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
       ctx.font = "bold 38px sans-serif";

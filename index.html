@@ -12,7 +12,7 @@
   <meta name="theme-color" content="#0a0e17">
   <link rel="manifest" href="manifest.json?v=5.0">
   <title>PB Trades ICT Replay Backtester & Academy</title>
-  <link rel="stylesheet" href="styles.css?v=10.0">
+  <link rel="stylesheet" href="styles.css?v=10.1">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230a0e17%22/><text x=%2250%22 y=%2270%22 font-size=%2265%22 text-anchor=%22middle%22>⚡</text></svg>">
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -215,8 +215,13 @@
               <div class="replay-time-readout" id="replayTimeReadout">09:30:00 NY</div>
             </div>
 
-            <!-- Fullscreen Header Actions (Trade HUD Toggle + Exit Fullscreen) -->
+            <!-- Fullscreen Header Actions (Layout Pills + Trade HUD Toggle + Exit Fullscreen) -->
             <div class="fs-header-actions">
+              <div class="pill-group pill-group-xs fs-layout-pills" id="fsLayoutPills" title="Chart View Layout">
+                <button class="pill-btn active" data-layout="single" title="Single Chart View">⬛ Single</button>
+                <button class="pill-btn" data-layout="dual" title="Side-by-Side SMT Divergence">◫ SMT</button>
+                <button class="pill-btn" data-layout="stacked" title="Stacked Dual View">⬒ Stack</button>
+              </div>
               <button class="player-btn fs-order-toggle-btn" id="fsOrderHudToggleBtn" title="Toggle Quick Order Execution HUD">⚡ Trade HUD</button>
               <button class="player-btn fs-toggle-btn" id="replayFullscreenToggleBtn" title="Toggle Fullscreen Focus Mode (F)">⛶ Fullscreen</button>
             </div>
@@ -269,6 +274,8 @@
                     <button class="pill-btn" data-tf="1m">1m</button>
                     <button class="pill-btn active" data-tf="5m">5m</button>
                     <button class="pill-btn" data-tf="15m">15m</button>
+                    <button class="pill-btn" data-tf="1h">1h</button>
+                    <button class="pill-btn" data-tf="Daily">Daily</button>
                   </div>
                 </div>
               </div>
@@ -786,11 +793,11 @@
   <div class="toast-notification" id="toastBox">Notification</div>
 
   <!-- LOAD SCRIPTS IN ORDER -->
-  <script src="pb_academy_data.js?v=10.0"></script>
-  <script src="academy_data.js?v=10.0"></script>
-  <script src="replay_scenarios_data.js?v=10.0"></script>
-  <script src="engine.js?v=10.0"></script>
-  <script src="replay_engine.js?v=10.0"></script>
-  <script src="app.js?v=10.0"></script>
+  <script src="pb_academy_data.js?v=10.1"></script>
+  <script src="academy_data.js?v=10.1"></script>
+  <script src="replay_scenarios_data.js?v=10.1"></script>
+  <script src="engine.js?v=10.1"></script>
+  <script src="replay_engine.js?v=10.1"></script>
+  <script src="app.js?v=10.1"></script>
 </body>
 </html>
