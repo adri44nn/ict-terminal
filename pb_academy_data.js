@@ -80,11 +80,11 @@ window.PB_ACADEMY_DATA = {
           "type": "box",
           "y1": 29173.0,
           "y2": 29206.75,
+          "startBar": 17,
+          "endBar": 19,
           "color": "rgba(16, 185, 129, 0.28)",
           "borderColor": "#10b981",
-          "label": "Bullish FVG Rebalance",
-          "xPercent": 0.45,
-          "wPercent": 0.35
+          "label": "Bullish FVG Rebalance"
         },
         {
           "type": "ray",
@@ -135,11 +135,11 @@ window.PB_ACADEMY_DATA = {
           "type": "box",
           "y1": 29173.0,
           "y2": 29206.75,
+          "startBar": 15,
+          "endBar": 17,
           "color": "rgba(16, 185, 129, 0.3)",
           "borderColor": "#10b981",
-          "label": "Displacement Bullish FVG",
-          "xPercent": 0.5,
-          "wPercent": 0.35
+          "label": "Displacement Bullish FVG"
         },
         {
           "type": "ray",
@@ -176,11 +176,11 @@ window.PB_ACADEMY_DATA = {
           "type": "box",
           "y1": 29159.5,
           "y2": 29196.0,
+          "startBar": 5,
+          "endBar": 8,
           "color": "rgba(239, 68, 68, 0.28)",
           "borderColor": "#ef4444",
-          "label": "Internal Liquidity (Bearish IRL FVG)",
-          "xPercent": 0.25,
-          "wPercent": 0.3
+          "label": "Internal Liquidity (Bearish IRL FVG)"
         },
         {
           "type": "ray",
@@ -217,11 +217,11 @@ window.PB_ACADEMY_DATA = {
           "type": "box",
           "y1": 29602.0,
           "y2": 29628.25,
+          "startBar": 14,
+          "endBar": 17,
           "color": "rgba(16, 185, 129, 0.28)",
           "borderColor": "#10b981",
-          "label": "Bullish 5m FVG (Displacement Leg)",
-          "xPercent": 0.4,
-          "wPercent": 0.35
+          "label": "Bullish 5m FVG (Displacement Leg)"
         },
         {
           "type": "ray",
@@ -276,21 +276,15 @@ window.PB_ACADEMY_DATA = {
           "xPercent": 0.4
         },
         {
-          "type": "box",
-          "y1": 29173.0,
-          "y2": 29206.75,
-          "color": "rgba(16, 185, 129, 0.3)",
-          "borderColor": "#10b981",
-          "label": "Step 4: Long Entry FVG CE (29,190.00)",
-          "xPercent": 0.46,
-          "wPercent": 0.35
-        },
-        {
-          "type": "ray",
-          "y": 29333.25,
-          "color": "#10b981",
-          "label": "Step 1: HTF DOL Target (29,333.25)",
-          "xPercent": 0.75
+          "type": "position",
+          "isLong": true,
+          "entry": 29190.0,
+          "sl": 29130.0,
+          "tp": 29333.25,
+          "rr": "2.38",
+          "riskLabel": "60 pts Risk / 143 pts Gain",
+          "startBar": 17,
+          "endBar": 23
         }
       ],
       "breakdown": [
@@ -321,11 +315,11 @@ window.PB_ACADEMY_DATA = {
           "type": "box",
           "y1": 29252.5,
           "y2": 29271.5,
+          "startBar": 4,
+          "endBar": 6,
           "color": "rgba(59, 130, 246, 0.28)",
           "borderColor": "#38bdf8",
-          "label": "10:00 AM Silver Bullet FVG",
-          "xPercent": 0.35,
-          "wPercent": 0.35
+          "label": "10:00 AM Silver Bullet FVG"
         },
         {
           "type": "ray",
@@ -359,31 +353,21 @@ window.PB_ACADEMY_DATA = {
       "sliceEnd": 2260,
       "annotations": [
         {
-          "type": "ray",
-          "y": 29505.5,
-          "color": "#ef4444",
-          "label": "Invalidation Stop Loss (29,505.50)",
-          "xPercent": 0.25
-        },
-        {
-          "type": "ray",
-          "y": 29604.0,
-          "color": "#38bdf8",
-          "label": "Long Entry @ FVG Retest (29,604.00)",
-          "xPercent": 0.45
-        },
-        {
-          "type": "ray",
-          "y": 29798.0,
-          "color": "#10b981",
-          "label": "Take Profit Target (29,798.00 / 1:2 R:R)",
-          "xPercent": 0.75
+          "type": "position",
+          "isLong": true,
+          "entry": 29604.0,
+          "sl": 29505.5,
+          "tp": 29798.0,
+          "rr": "1.98",
+          "riskLabel": "$196 (0.98% on $20k)",
+          "startBar": 15,
+          "endBar": 23
         }
       ],
       "breakdown": [
         "<strong>1. Logical Invalidation:</strong> The Stop Loss is not an arbitrary dollar amount; it sits below structural swing low (29,505.50). If price trades there, the setup is mathematically dead.",
-        "<strong>2. Position Sizing:</strong> With 98 points of risk, a 1-micro contract (/pt) risks , perfectly fitting a 1% risk rule on a ,000 account.",
-        "<strong>3. Reward vs Risk:</strong> Target at 29,798.00 captures 194 points ( profit) for a clean 1:1.98 Risk-to-Reward ratio."
+        "<strong>2. Position Sizing:</strong> With 98 points of risk, a 1-micro contract ($2/pt) risks $196, perfectly fitting a 1% risk rule on a $20,000 account.",
+        "<strong>3. Reward vs Risk:</strong> Target at 29,798.00 captures 194 points ($388 profit) for a clean 1:1.98 Risk-to-Reward ratio."
       ]
     },
     "content": "\n        <div class=\"academy-article\">\n          <h3>The Math of Consistency</h3>\n          <p>Even an ICT setup with 60% win rate will experience 3 to 5 consecutive losses. If you risk 5% per trade, you will suffer devastating drawdowns.</p>\n          \n          <div class=\"tip-card highlight\">\n            <h4>\ud83d\udee1\ufe0f PB Trades Rules for Longevity:</h4>\n            <ul>\n              <li><strong>Max Risk Per Trade:</strong> 0.5% to 1.0% of total account equity.</li>\n              <li><strong>Max Daily Loss:</strong> 2 losing trades = shut down the terminal for the day.</li>\n              <li><strong>Minimum R:R Target:</strong> Never take a trade under 1:2 Risk to Reward.</li>\n              <li><strong>No Chasing:</strong> If price leaves without filling your FVG limit, let it go. There will always be another setup tomorrow.</li>\n            </ul>\n          </div>\n        </div>\n      "
@@ -414,11 +398,11 @@ window.PB_ACADEMY_DATA = {
           "type": "box",
           "y1": 29215.0,
           "y2": 29235.0,
+          "startBar": 12,
+          "endBar": 15,
           "color": "rgba(16, 185, 129, 0.28)",
           "borderColor": "#10b981",
-          "label": "Displacement Bullish FVG",
-          "xPercent": 0.45,
-          "wPercent": 0.35
+          "label": "Displacement Bullish FVG"
         },
         {
           "type": "ray",
@@ -452,35 +436,19 @@ window.PB_ACADEMY_DATA = {
       "sliceEnd": 2260,
       "annotations": [
         {
-          "type": "ray",
-          "y": 29505.5,
-          "color": "#ef4444",
-          "label": "Range Low (0%) 29,505.50",
-          "xPercent": 0.2
-        },
-        {
-          "type": "ray",
-          "y": 29652.12,
-          "color": "#38bdf8",
-          "label": "50% Equilibrium (29,652.12)",
-          "xPercent": 0.45
+          "type": "dealing_range",
+          "low": 29505.5,
+          "high": 29798.75
         },
         {
           "type": "box",
           "y1": 29602.0,
           "y2": 29628.25,
+          "startBar": 14,
+          "endBar": 17,
           "color": "rgba(16, 185, 129, 0.28)",
           "borderColor": "#10b981",
-          "label": "Discount Entry FVG (< 50% EQ)",
-          "xPercent": 0.45,
-          "wPercent": 0.35
-        },
-        {
-          "type": "ray",
-          "y": 29798.75,
-          "color": "#10b981",
-          "label": "Range High (100%) 29,798.75",
-          "xPercent": 0.75
+          "label": "Discount Entry FVG (< 50% EQ)"
         }
       ],
       "breakdown": [
@@ -507,21 +475,21 @@ window.PB_ACADEMY_DATA = {
       "sliceEnd": 2245,
       "annotations": [
         {
-          "type": "ray",
-          "y": 29133.0,
-          "color": "#ef4444",
-          "label": "NQ Higher Low (SMT Absorption 29,133)",
-          "xPercent": 0.2
+          "type": "smt",
+          "bar1": 9,
+          "bar2": 13,
+          "nqLow1": 29133.0,
+          "nqLow2": 29134.25
         },
         {
           "type": "box",
           "y1": 29173.0,
           "y2": 29206.75,
+          "startBar": 17,
+          "endBar": 19,
           "color": "rgba(16, 185, 129, 0.3)",
           "borderColor": "#10b981",
-          "label": "Stronger Asset Long Entry FVG",
-          "xPercent": 0.45,
-          "wPercent": 0.35
+          "label": "Stronger Asset Long Entry FVG"
         },
         {
           "type": "ray",
@@ -565,11 +533,11 @@ window.PB_ACADEMY_DATA = {
           "type": "box",
           "y1": 29173.0,
           "y2": 29206.75,
+          "startBar": 17,
+          "endBar": 19,
           "color": "rgba(16, 185, 129, 0.3)",
           "borderColor": "#10b981",
-          "label": "Q2: Bullish PDA Respected",
-          "xPercent": 0.45,
-          "wPercent": 0.35
+          "label": "Q2: Bullish PDA Respected"
         },
         {
           "type": "ray",
@@ -597,40 +565,30 @@ window.PB_ACADEMY_DATA = {
       "scenarioId": "real-session-2026-08-28",
       "symbol": "MNQ",
       "tf": "5m",
-      "title": "\ud83d\udcc8 Real Chart Markup: Precise Micro Sizing on NQ (2026-08-28 MNQ)",
-      "subtitle": "Stop distance of 35 pts with  budget = 3 MNQ contracts ( risk). Zero guesswork.",
+      "title": "📈 Real Chart Markup: Precise Micro Sizing on NQ (2026-08-28 MNQ)",
+      "subtitle": "Stop distance of 35 pts with $250 budget = 3 MNQ contracts ($210 risk). Zero guesswork.",
       "sliceStart": 2140,
       "sliceEnd": 2260,
       "annotations": [
         {
-          "type": "ray",
-          "y": 29505.5,
-          "color": "#ef4444",
-          "label": "Structural Stop (35 pts = /con)",
-          "xPercent": 0.25
-        },
-        {
-          "type": "ray",
-          "y": 29604.0,
-          "color": "#38bdf8",
-          "label": "Entry (3 MNQ =  Risk)",
-          "xPercent": 0.45
-        },
-        {
-          "type": "ray",
-          "y": 29798.0,
-          "color": "#10b981",
-          "label": "Take Profit (+194 pts = +,164)",
-          "xPercent": 0.75
+          "type": "position",
+          "isLong": true,
+          "entry": 29604.0,
+          "sl": 29505.5,
+          "tp": 29798.0,
+          "rr": "1.98",
+          "riskLabel": "3 MNQ ($210 Risk)",
+          "startBar": 15,
+          "endBar": 23
         }
       ],
       "breakdown": [
         "<strong>1. Invalidation Stop:</strong> The stop belongs strictly below the structural swing low (29,505.50).",
-        "<strong>2. Micro Contract Math:</strong> Full NQ would risk  on a 35-point stop (violating the  budget). 3 MNQ (/pt) risks exactly  (under the budget).",
+        "<strong>2. Micro Contract Math:</strong> Full NQ would risk $700 on a 35-point stop (violating the $250 budget). 3 MNQ ($2/pt) risks exactly $210 (under the budget).",
         "<strong>3. Capital Preservation:</strong> Sizing strictly to the structural stop eliminates the temptation to arbitrarily move stops into the noise."
       ]
     },
-    "content": "\n        <div class=\"academy-article\">\n          <h3>The Prop-Firm Survival Blueprint (Episode 11)</h3>\n          <p>PB Trades outlines the exact mathematics and rules required to pass evaluations and keep funded accounts:</p>\n\n          <div class=\"table-responsive\">\n            <table class=\"academy-table\">\n              <thead>\n                <tr>\n                  <th>Account Phase</th>\n                  <th>Risk Per Trade</th>\n                  <th>Daily Operational Rules</th>\n                </tr>\n              </thead>\n              <tbody>\n                <tr>\n                  <td><strong>Phase 1: Evaluation</strong></td>\n                  <td>1.0% max (0.5% beginner)</td>\n                  <td>Strictly <strong>ONE A+ setup per day</strong>. Win or lose, you are finished for the session.</td>\n                </tr>\n                <tr>\n                  <td><strong>Phase 2: Buffer Building</strong></td>\n                  <td>0.5% strict</td>\n                  <td>Max 2 trades per day. <strong>Stop trading immediately after 1 win!</strong> Build cushion equal to max drawdown.</td>\n                </tr>\n                <tr>\n                  <td><strong>Phase 3: Payout Phase</strong></td>\n                  <td>0.5%</td>\n                  <td>Never withdraw into your buffer. Maintain the cushion so normal variance never violates the account.</td>\n                </tr>\n              </tbody>\n            </table>\n          </div>\n\n          <h4 style=\"margin-top: 25px;\">The Exact Position Sizing Equation</h4>\n          <div class=\"tip-card highlight\">\n            <p style=\"font-size: 14px; font-weight: 700; color: #38bdf8;\">\n              Number of Contracts = Dollar Risk Budget \u00f7 (Stop Distance in Points \u00d7 Point Value)\n            </p>\n            <p>For NQ with a  budget and 35-point stop:</p>\n            <ul>\n              <li><strong>Full E-mini NQ (/pt):</strong> 35 pts \u00d7  =  risk \u2794 <strong>0 Contracts (Too big!)</strong></li>\n              <li><strong>Micro E-mini MNQ (/pt):</strong> 35 pts \u00d7  =  risk/con \u2794 <strong>3 MNQ Contracts ( risk)</strong></li>\n            </ul>\n          </div>\n        </div>\n      "
+    "content": "\n        <div class=\"academy-article\">\n          <h3>The Prop-Firm Survival Blueprint (Episode 11)</h3>\n          <p>PB Trades outlines the exact mathematics and rules required to pass evaluations and keep funded accounts:</p>\n\n          <div class=\"table-responsive\">\n            <table class=\"academy-table\">\n              <thead>\n                <tr>\n                  <th>Account Phase</th>\n                  <th>Risk Per Trade</th>\n                  <th>Daily Operational Rules</th>\n                </tr>\n              </thead>\n              <tbody>\n                <tr>\n                  <td><strong>Phase 1: Evaluation</strong></td>\n                  <td>1.0% max (0.5% beginner)</td>\n                  <td>Strictly <strong>ONE A+ setup per day</strong>. Win or lose, you are finished for the session.</td>\n                </tr>\n                <tr>\n                  <td><strong>Phase 2: Buffer Building</strong></td>\n                  <td>0.5% strict</td>\n                  <td>Max 2 trades per day. <strong>Stop trading immediately after 1 win!</strong> Build cushion equal to max drawdown.</td>\n                </tr>\n                <tr>\n                  <td><strong>Phase 3: Payout Phase</strong></td>\n                  <td>0.5%</td>\n                  <td>Never withdraw into your buffer. Maintain the cushion so normal variance never violates the account.</td>\n                </tr>\n              </tbody>\n            </table>\n          </div>\n\n          <h4 style=\"margin-top: 25px;\">The Exact Position Sizing Equation</h4>\n          <div class=\"tip-card highlight\">\n            <p style=\"font-size: 14px; font-weight: 700; color: #38bdf8;\">\n              Number of Contracts = Dollar Risk Budget ÷ (Stop Distance in Points × Point Value)\n            </p>\n            <p>For NQ with a $250 budget and 35-point stop:</p>\n            <ul>\n              <li><strong>Full E-mini NQ ($20/pt):</strong> 35 pts × $20 = $700 risk ➔ <strong>0 Contracts (Too big!)</strong></li>\n              <li><strong>Micro E-mini MNQ ($2/pt):</strong> 35 pts × $2 = $70 risk/con ➔ <strong>3 MNQ Contracts ($210 risk)</strong></li>\n            </ul>\n          </div>\n        </div>\n      "
   }
 ],
   "quizzes": [

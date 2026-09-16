@@ -71,6 +71,40 @@ class SoundAlerts {
 const audio = new SoundAlerts();
 
 // ============================================================================
+// DEVICE DETECTION & RESPONSIVE TOUCH ENGINE (Mac, iPad, iPhone)
+// ============================================================================
+function detectDeviceClass() {
+  const ua = navigator.userAgent || '';
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const maxDim = Math.max(w, h);
+  const minDim = Math.min(w, h);
+
+  // iPad Detection: iPadOS 13+ reports "Macintosh" with maxTouchPoints > 1, or older "iPad" UA
+  const isIPad = /iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || (isTouch && minDim >= 600 && maxDim <= 1366);
+  // iPhone / Phone Detection: "iPhone" UA or touch device with narrow width
+  const isIPhone = /iPhone|iPod/.test(ua) || (isTouch && !isIPad && minDim < 600);
+
+  document.body.classList.remove('device-mac', 'device-ipad', 'device-iphone');
+  if (isIPad) {
+    document.body.classList.add('device-ipad');
+    window.__DEVICE_CLASS__ = 'ipad';
+  } else if (isIPhone) {
+    document.body.classList.add('device-iphone');
+    window.__DEVICE_CLASS__ = 'iphone';
+  } else {
+    document.body.classList.add('device-mac');
+    window.__DEVICE_CLASS__ = 'mac';
+  }
+}
+detectDeviceClass();
+window.addEventListener('resize', detectDeviceClass);
+window.addEventListener('orientationchange', () => {
+  setTimeout(detectDeviceClass, 100);
+});
+
+// ============================================================================
 // 1. INITIALIZATION & ROUTING
 // ============================================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -2809,6 +2843,16 @@ function renderRealAcademyChart(chartEx) {
       } else if (ann.type === 'ray') {
         if (ann.y < minPrice) minPrice = ann.y;
         if (ann.y > maxPrice) maxPrice = ann.y;
+      } else if (ann.type === 'position') {
+        const lo = Math.min(ann.entry, ann.sl, ann.tp);
+        const hi = Math.max(ann.entry, ann.sl, ann.tp);
+        if (lo < minPrice) minPrice = lo;
+        if (hi > maxPrice) maxPrice = hi;
+      } else if (ann.type === 'dealing_range') {
+        const lo = Math.min(ann.low, ann.high);
+        const hi = Math.max(ann.low, ann.high);
+        if (lo < minPrice) minPrice = lo;
+        if (hi > maxPrice) maxPrice = hi;
       }
     });
   }
@@ -2828,6 +2872,35 @@ function renderRealAcademyChart(chartEx) {
   // 3. Background
   ctx.fillStyle = '#080c14';
   ctx.fillRect(0, 0, w, h);
+
+  // Background shading for dealing_range (Premium red tint, Discount green tint)
+  if (chartEx.annotations) {
+    chartEx.annotations.forEach(ann => {
+      if (ann.type === 'dealing_range') {
+        const yTop = priceToY(ann.high);
+        const yBot = priceToY(ann.low);
+        const eqPrice = (ann.low + ann.high) / 2;
+        const yEq = priceToY(eqPrice);
+
+        // Premium Zone (above EQ) - subtle crimson tint
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.07)';
+        ctx.fillRect(0, yTop, chartWidth, yEq - yTop);
+
+        // Discount Zone (below EQ) - subtle emerald tint
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.07)';
+        ctx.fillRect(0, yEq, chartWidth, yBot - yEq);
+
+        // Premium / Discount Watermark Labels
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
+        ctx.textAlign = 'left';
+        ctx.fillText('🔴 PREMIUM ZONE (Sell / Short Only > 50% EQ)', 14, yTop + 20);
+
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.35)';
+        ctx.fillText('🟢 DISCOUNT ZONE (Buy / Long Only < 50% EQ)', 14, yEq + 22);
+      }
+    });
+  }
 
   // 4. Grid Lines & Price Axis
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
@@ -2853,7 +2926,7 @@ function renderRealAcademyChart(chartEx) {
   ctx.lineTo(chartWidth, chartHeight);
   ctx.stroke();
 
-  // 5. Render Candlesticks First (So Annotations Stand Out Clearly)
+  // 5. Render Candlesticks First
   visibleCandles.forEach((c, i) => {
     const xCenter = i * barWidth + barWidth / 2;
     const isUp = c.close >= c.open;
@@ -2880,19 +2953,28 @@ function renderRealAcademyChart(chartEx) {
     ctx.fillRect(xCenter - candleWidth / 2, top, candleWidth, hCandle);
   });
 
-  // 6. Render Annotations (FVG Boxes, Liquidity Rays, Midpoints)
+  // 6. Render Specialized Institutional Annotations
   if (chartEx.annotations) {
     chartEx.annotations.forEach(ann => {
+      // A. Bar-Anchored or Percent Box (FVG, Order Blocks)
       if (ann.type === 'box') {
         const yTop = priceToY(Math.max(ann.y1, ann.y2));
         const yBot = priceToY(Math.min(ann.y1, ann.y2));
-        const xStart = chartWidth * (ann.xPercent !== undefined ? ann.xPercent : 0.4);
-        const boxW = chartWidth * (ann.wPercent !== undefined ? ann.wPercent : 0.35);
+        
+        let xStart, boxW;
+        if (ann.startBar !== undefined) {
+          xStart = ann.startBar * barWidth;
+          const endB = ann.endBar !== undefined ? ann.endBar : Math.min(visibleCandles.length - 1, ann.startBar + 4);
+          boxW = Math.max(barWidth * 1.5, (endB - ann.startBar + 1) * barWidth);
+        } else {
+          xStart = chartWidth * (ann.xPercent !== undefined ? ann.xPercent : 0.4);
+          boxW = chartWidth * (ann.wPercent !== undefined ? ann.wPercent : 0.35);
+        }
 
         // Shaded Box
         ctx.fillStyle = ann.color || 'rgba(16, 185, 129, 0.28)';
         ctx.fillRect(xStart, yTop, boxW, yBot - yTop);
-        ctx.strokeStyle = ann.borderColor || ann.color.replace('0.25', '0.85').replace('0.28', '0.9').replace('0.3', '1.0') || '#10b981';
+        ctx.strokeStyle = ann.borderColor || '#10b981';
         ctx.lineWidth = 1.5;
         ctx.strokeRect(xStart, yTop, boxW, yBot - yTop);
 
@@ -2907,7 +2989,7 @@ function renderRealAcademyChart(chartEx) {
         ctx.setLineDash([]);
 
         // Label Badge
-        ctx.fillStyle = 'rgba(10, 14, 23, 0.85)';
+        ctx.fillStyle = 'rgba(10, 14, 23, 0.9)';
         ctx.font = 'bold 10px monospace';
         const tw = ctx.measureText(ann.label).width;
         ctx.fillRect(xStart + 4, yTop - 14, tw + 8, 14);
@@ -2915,10 +2997,11 @@ function renderRealAcademyChart(chartEx) {
         ctx.lineWidth = 0.8;
         ctx.strokeRect(xStart + 4, yTop - 14, tw + 8, 14);
 
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = ann.borderColor || '#38bdf8';
         ctx.textAlign = 'left';
         ctx.fillText(ann.label, xStart + 8, yTop - 3);
 
+      // B. Horizontal Liquidity Ray / Breakout Level
       } else if (ann.type === 'ray') {
         const y = priceToY(ann.y);
         ctx.strokeStyle = ann.color || '#a855f7';
@@ -2945,6 +3028,125 @@ function renderRealAcademyChart(chartEx) {
         ctx.fillStyle = ann.color || '#a855f7';
         ctx.textAlign = 'left';
         ctx.fillText(labelText, xPos + 4, y + 4);
+
+      // C. TradingView-Style Long/Short Position Tool (Modules 5, 7, 12)
+      } else if (ann.type === 'position') {
+        const isLong = ann.isLong !== false;
+        const entryY = priceToY(ann.entry);
+        const slY = priceToY(ann.sl);
+        const tpY = priceToY(ann.tp);
+
+        let xStart = ann.startBar !== undefined ? ann.startBar * barWidth : chartWidth * 0.45;
+        let boxW = ann.endBar !== undefined ? (ann.endBar - ann.startBar + 1) * barWidth : chartWidth * 0.35;
+        const xEnd = Math.min(chartWidth - 10, xStart + boxW);
+
+        // Profit Zone (Green)
+        const profitTop = Math.min(entryY, tpY);
+        const profitHeight = Math.abs(tpY - entryY);
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+        ctx.fillRect(xStart, profitTop, xEnd - xStart, profitHeight);
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.7)';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(xStart, profitTop, xEnd - xStart, profitHeight);
+
+        // Loss Zone (Red)
+        const lossTop = Math.min(entryY, slY);
+        const lossHeight = Math.abs(slY - entryY);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.22)';
+        ctx.fillRect(xStart, lossTop, xEnd - xStart, lossHeight);
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(xStart, lossTop, xEnd - xStart, lossHeight);
+
+        // Entry Line
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(xStart, entryY);
+        ctx.lineTo(xEnd, entryY);
+        ctx.stroke();
+
+        // Position Badges
+        ctx.font = 'bold 9px monospace';
+        // TP Target Badge
+        ctx.fillStyle = '#10b981';
+        ctx.fillText(`TARGET: ${ann.tp.toFixed(2)} (+${Math.abs(ann.tp - ann.entry).toFixed(1)} pts)`, xStart + 6, tpY + (isLong ? 12 : -5));
+        // SL Invalidation Badge
+        ctx.fillStyle = '#ef4444';
+        ctx.fillText(`STOP: ${ann.sl.toFixed(2)} (-${Math.abs(ann.entry - ann.sl).toFixed(1)} pts)`, xStart + 6, slY + (isLong ? -5 : 12));
+        // Center R:R Pill
+        const rrText = ` R:R 1:${ann.rr || '2.0'} ${ann.riskLabel ? '• ' + ann.riskLabel : ''} `;
+        const rrW = ctx.measureText(rrText).width;
+        ctx.fillStyle = '#0a0e17';
+        ctx.fillRect(xStart + 6, entryY - 8, rrW + 6, 16);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.strokeRect(xStart + 6, entryY - 8, rrW + 6, 16);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText(rrText, xStart + 8, entryY + 4);
+
+      // D. Full Dealing Range with 50% Equilibrium (Module 9)
+      } else if (ann.type === 'dealing_range') {
+        const yHigh = priceToY(ann.high);
+        const yLow = priceToY(ann.low);
+        const eqPrice = (ann.low + ann.high) / 2;
+        const yEq = priceToY(eqPrice);
+
+        // 50% Equilibrium Line
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, yEq);
+        ctx.lineTo(chartWidth, yEq);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Badges for 100%, 50%, and 0%
+        const drawRangeTag = (y, text, color) => {
+          ctx.font = 'bold 10px monospace';
+          const tw = ctx.measureText(text).width;
+          ctx.fillStyle = '#0a0e17';
+          ctx.fillRect(chartWidth * 0.55, y - 9, tw + 10, 18);
+          ctx.strokeStyle = color;
+          ctx.strokeRect(chartWidth * 0.55, y - 9, tw + 10, 18);
+          ctx.fillStyle = color;
+          ctx.fillText(text, chartWidth * 0.55 + 5, y + 4);
+        };
+
+        drawRangeTag(yHigh, ` 100% RANGE HIGH: ${ann.high.toFixed(2)} `, '#10b981');
+        drawRangeTag(yEq, ` 50.0% EQUILIBRIUM: ${eqPrice.toFixed(2)} `, '#38bdf8');
+        drawRangeTag(yLow, ` 0.0% RANGE LOW: ${ann.low.toFixed(2)} `, '#ef4444');
+
+      // E. SMT Divergence Intermarket Overlay (Module 10)
+      } else if (ann.type === 'smt') {
+        const y1 = priceToY(ann.nqLow1);
+        const y2 = priceToY(ann.nqLow2);
+        const x1 = ann.bar1 * barWidth + barWidth / 2;
+        const x2 = ann.bar2 * barWidth + barWidth / 2;
+
+        // NQ Trendline (Higher Low)
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        // SMT Divergence Callout Banner
+        ctx.fillStyle = 'rgba(10, 14, 23, 0.94)';
+        ctx.fillRect(16, 32, 340, 48);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(16, 32, 340, 48);
+
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#38bdf8';
+        ctx.textAlign = 'left';
+        ctx.fillText('⚡ BULLISH SMT DIVERGENCE CONFIRMED', 24, 48);
+        ctx.font = '10px monospace';
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillText('• NQ: Made Higher Low (29,133 held discount)', 24, 62);
+        ctx.fillText('• ES: Made Lower Low (Swept overnight stops)', 24, 74);
       }
     });
   }

@@ -265,6 +265,24 @@ class ICTRequestHandler(SimpleHTTPRequestHandler):
                 })
             return
 
+        elif path == "/api/replay/live-data":
+            sym = query.get("symbol", ["MNQ"])[0].upper()
+            days = query.get("days", ["5"])[0]
+            range_str = f"{days}d"
+            cfg = SYMBOLS.get(sym, SYMBOLS["MNQ"])
+            
+            # Fetch 1m raw candles from Yahoo Finance
+            candles = fetch_candles(cfg['yahoo'], interval="1m", range_str=range_str)
+            if not candles or len(candles) < 50:
+                candles = fetch_candles(cfg['alt'], interval="1m", range_str=range_str)
+
+            self.send_json({
+                "symbol": sym,
+                "total_candles": len(candles),
+                "candles_1m": candles
+            })
+            return
+
         elif path in ("/api/paper", "/api/paper/account"):
             self.send_json(CACHE["paper_account"])
             return

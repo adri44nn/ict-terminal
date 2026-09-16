@@ -58,6 +58,13 @@
       this.priceScaleDragStartMin = 0;
       this.priceScaleDragStartMax = 0;
 
+      // iPad & Touch Gesture Tracking
+      this.isTouchDevice = false;
+      this.isPinching = false;
+      this.pinchStartDist = 0;
+      this.pinchStartBarsCount = 55;
+      this.lastTouchCount = 0;
+
       // Replay Account & Positions
       this.account = {
         startingBalance: 25000.00,
@@ -693,16 +700,40 @@
 
       const getPos = (e) => {
         const rect = this.canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+        const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
         return {
           x: clientX - rect.left,
           y: clientY - rect.top
         };
       };
 
+      const getTouchDist = (touches) => {
+        if (touches.length < 2) return 0;
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.hypot(dx, dy);
+      };
+
       const onPointerDown = (e) => {
-        if (e.touches && e.touches.length > 1) return;
+        // Track touch usage for responsive touch handle hit radiuses
+        if (e.touches) {
+          this.isTouchDevice = true;
+          if (e.cancelable) e.preventDefault(); // Stop iOS page rubberband bounce on chart touch
+
+          // 2-Finger Pinch-to-Zoom Gesture Start (iPad / Mobile)
+          if (e.touches.length === 2) {
+            this.isPinching = true;
+            this.isPanning = false;
+            this.isDraggingHandle = false;
+            this.isDrawing = false;
+            this.pinchStartDist = getTouchDist(e.touches);
+            this.pinchStartBarsCount = this.visibleBarsCount;
+            return;
+          }
+          if (e.touches.length > 2) return;
+        }
+
         const pos = getPos(e);
         const visibleCandles = this.getVisibleCandlesSlice();
         const { minPrice, maxPrice } = this.calculatePriceRange(visibleCandles);
@@ -794,6 +825,34 @@
       };
 
       const onPointerMove = (e) => {
+        // Prevent viewport scroll during touch interaction
+        if (e.touches && e.cancelable) {
+          e.preventDefault();
+        }
+
+        // Handle 2-Finger Pinch-to-Zoom on iPad / iPhone
+        if (e.touches && e.touches.length === 2) {
+          if (!this.isPinching) {
+            this.isPinching = true;
+            this.pinchStartDist = getTouchDist(e.touches);
+            this.pinchStartBarsCount = this.visibleBarsCount;
+            return;
+          }
+          const curDist = getTouchDist(e.touches);
+          if (this.pinchStartDist > 10 && curDist > 10) {
+            const pinchRatio = this.pinchStartDist / curDist;
+            const newBarsCount = Math.round(this.pinchStartBarsCount * pinchRatio);
+            this.visibleBarsCount = Math.max(10, Math.min(2600, newBarsCount));
+            this.render();
+          }
+          return;
+        }
+
+        // If pinching ended or only 1 finger remaining
+        if (this.isPinching) {
+          return;
+        }
+
         const pos = getPos(e);
         const visibleCandles = this.getVisibleCandlesSlice();
         const { minPrice, maxPrice } = this.calculatePriceRange(visibleCandles);
@@ -954,7 +1013,14 @@
         this.render();
       };
 
-      const onPointerUp = () => {
+      const onPointerUp = (e) => {
+        if (e && e.touches && e.touches.length > 0) {
+          if (e.touches.length === 1) {
+            this.isPinching = false;
+          }
+          return;
+        }
+        this.isPinching = false;
         this.isPanning = false;
         this.isDraggingHandle = false;
         this.activeDragHandle = null;
@@ -990,6 +1056,7 @@
 
       const onPointerLeave = () => {
         this.cursorPos = null;
+        this.isPinching = false;
         this.isPanning = false;
         this.isDraggingHandle = false;
         this.activeDragHandle = null;
@@ -1005,7 +1072,7 @@
 
       this.canvas.addEventListener('touchstart', onPointerDown, { passive: false });
       this.canvas.addEventListener('touchmove', onPointerMove, { passive: false });
-      this.canvas.addEventListener('touchend', onPointerUp);
+      this.canvas.addEventListener('touchend', onPointerUp, { passive: false });
       this.canvas.addEventListener('touchcancel', onPointerLeave);
 
       this.canvas.addEventListener('wheel', (e) => {
@@ -1099,7 +1166,8 @@
     }
 
     findDraggableShapeAt(x, y, minPrice, maxPrice) {
-      const threshold = 16;
+      // Touch-adaptive hit radius: 26px on iPad/touch glass for easy grabbing, 16px on desktop cursor
+      const threshold = this.isTouchDevice ? 26 : 16;
       const allShapes = [...this.drawings];
       if (this.currentShape) allShapes.push(this.currentShape);
 
@@ -2272,10 +2340,17 @@
         this.render();
       };
 
+      const onTouchMove = (e) => {
+        if (e.cancelable) e.preventDefault();
+        onMove(e);
+      };
+
       this.secondaryCanvas.addEventListener('mousemove', onMove);
       this.secondaryCanvas.addEventListener('mouseleave', onLeave);
-      this.secondaryCanvas.addEventListener('touchmove', onMove, { passive: false });
+      this.secondaryCanvas.addEventListener('touchstart', onTouchMove, { passive: false });
+      this.secondaryCanvas.addEventListener('touchmove', onTouchMove, { passive: false });
       this.secondaryCanvas.addEventListener('touchend', onLeave);
+      this.secondaryCanvas.addEventListener('touchcancel', onLeave);
     }
 
     screenToPriceSecondary(x, y) {
