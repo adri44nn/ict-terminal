@@ -222,6 +222,7 @@
                 <button class="pill-btn" data-layout="dual" title="Side-by-Side SMT Divergence">◫ SMT</button>
                 <button class="pill-btn" data-layout="stacked" title="Stacked Dual View">⬒ Stack</button>
               </div>
+              <button class="player-btn journal-nav-btn" id="replayOpenJournalBtn" title="View Completed Trades Journal">💼 Journal (<span id="replayJournalCountBadge">0</span>)</button>
               <button class="player-btn fs-order-toggle-btn" id="fsOrderHudToggleBtn" title="Toggle Quick Order Execution HUD">⚡ Trade HUD</button>
               <button class="player-btn fs-toggle-btn" id="replayFullscreenToggleBtn" title="Toggle Fullscreen Focus Mode (F)">⛶ Fullscreen</button>
             </div>
@@ -245,6 +246,7 @@
             <button class="btn btn-buy btn-sm" id="fsBuyBtn" title="Instant Buy / Long (Hotkey: B)">🟢 BUY</button>
             <button class="btn btn-sell btn-sm" id="fsSellBtn" title="Instant Sell / Short (Hotkey: S)">🔴 SELL</button>
             <button class="btn btn-secondary btn-xs" id="fsBracketSyncBtn" title="Snap Stop Loss & Take Profit from on-chart position bracket">🎯 Snap Bracket</button>
+            <button class="btn btn-secondary btn-xs" id="fsOpenJournalBtn" title="Open Completed Trades Journal">💼 Journal</button>
             <div class="exec-hud-pnl" id="fsMiniPnlDisplay" title="Current open positions and P&L">0 Pos</div>
           </div>
 
@@ -403,6 +405,10 @@
             <div class="active-positions-mini" id="replayActivePositionsList">
               <div style="color: var(--text-muted); font-size: 11px; padding: 6px 0;">No active positions open.</div>
             </div>
+
+            <button class="btn btn-primary btn-xs" id="sidebarJournalBtn" style="width: 100%; margin-top: 10px; font-weight: 700;">
+              📓 View Journal (<span id="sidebarJournalCountBadge">0</span> trades)
+            </button>
           </div>
 
         </div>
@@ -737,18 +743,28 @@
     <!-- 6. BACKTEST JOURNAL & PERFORMANCE TAB -->
     <!-- ===================================================================== -->
     <section id="paperTab" class="tab-view">
+      <div class="journal-tab-header">
+        <div>
+          <h2>💼 Completed Backtest Trades Journal</h2>
+          <p class="section-desc">Persistent trade log across all simulated backtest sessions. Review win/loss outcomes, points gained/lost, and execution metrics.</p>
+        </div>
+        <div class="journal-header-actions">
+          <button class="btn btn-primary btn-sm" id="journalBackToReplayBtn">⏪ Back to Replay Chart</button>
+        </div>
+      </div>
+
       <div class="paper-overview-grid">
         <div class="metric-card">
-          <div class="metric-title">Backtest Balance</div>
+          <div class="metric-title">Simulated Balance</div>
           <div class="metric-value" id="paperBalanceDisplay">$25,000.00</div>
         </div>
         <div class="metric-card">
-          <div class="metric-title">Realized P&L</div>
+          <div class="metric-title">Net Realized P&L</div>
           <div class="metric-value" id="paperUnrealizedDisplay">$0.00</div>
         </div>
         <div class="metric-card">
           <div class="metric-title">Win Rate</div>
-          <div class="metric-value" id="paperWinRateDisplay">0.0%</div>
+          <div class="metric-value" id="paperWinRateDisplay">0.0% (0W - 0L)</div>
         </div>
         <div class="metric-card">
           <div class="metric-title">Profit Factor</div>
@@ -758,27 +774,35 @@
 
       <div class="positions-card">
         <div class="positions-header">
-          <h3>Completed Backtest Trades Journal</h3>
-          <button class="btn btn-secondary" id="resetPaperAccountBtn" style="font-size: 11px;">🔄 Reset Journal</button>
+          <div class="journal-filter-group">
+            <button class="journal-filter-chip active" data-filter="ALL">All Trades (<span id="jFilterCountAll">0</span>)</button>
+            <button class="journal-filter-chip chip-win" data-filter="WIN">🎯 Wins (<span id="jFilterCountWin">0</span>)</button>
+            <button class="journal-filter-chip chip-loss" data-filter="LOSS">🛑 Losses (<span id="jFilterCountLoss">0</span>)</button>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn btn-secondary btn-xs" id="exportJournalCsvBtn">📥 Export CSV</button>
+            <button class="btn btn-secondary btn-xs" id="resetPaperAccountBtn">🔄 Clear Journal</button>
+          </div>
         </div>
         <div class="table-responsive">
           <table class="pos-table">
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Scenario</th>
+                <th>Date / Time</th>
+                <th>Asset & Scenario</th>
                 <th>Side</th>
                 <th>Model</th>
                 <th>Entry</th>
                 <th>Exit</th>
                 <th>Points</th>
                 <th>P&L ($)</th>
-                <th>Result</th>
+                <th>Outcome</th>
+                <th>Trigger</th>
               </tr>
             </thead>
             <tbody id="backtestJournalTbody">
               <tr>
-                <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 32px 16px;">
                   No backtested trades yet. Use the Replay Backtest tab to execute trades on historical candles.
                 </td>
               </tr>
@@ -793,11 +817,11 @@
   <div class="toast-notification" id="toastBox">Notification</div>
 
   <!-- LOAD SCRIPTS IN ORDER -->
-  <script src="pb_academy_data.js?v=10.1"></script>
-  <script src="academy_data.js?v=10.1"></script>
-  <script src="replay_scenarios_data.js?v=10.1"></script>
-  <script src="engine.js?v=10.1"></script>
-  <script src="replay_engine.js?v=10.1"></script>
-  <script src="app.js?v=10.1"></script>
+  <script src="pb_academy_data.js?v=10.2"></script>
+  <script src="academy_data.js?v=10.2"></script>
+  <script src="replay_scenarios_data.js?v=10.2"></script>
+  <script src="engine.js?v=10.2"></script>
+  <script src="replay_engine.js?v=10.2"></script>
+  <script src="app.js?v=10.2"></script>
 </body>
 </html>

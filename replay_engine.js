@@ -534,6 +534,7 @@
       pos.pnl = pnl;
       pos.pts = pts;
       pos.status = 'CLOSED';
+      pos.exitReason = 'MANUAL';
 
       this.account.balance += pnl;
       this.account.realizedPnL += pnl;
@@ -604,6 +605,7 @@
           pos.pnl = pnl;
           pos.pts = pts;
           pos.status = reason;
+          pos.exitReason = reason;
 
           this.account.balance += pnl;
           this.account.realizedPnL += pnl;
@@ -833,7 +835,9 @@
             endX: s.endX,
             endY: s.endY,
             startPrice: s.startPrice,
-            endPrice: s.endPrice
+            endPrice: s.endPrice,
+            startTime: s.startTime,
+            endTime: s.endTime
           };
           return;
         }
@@ -863,6 +867,9 @@
         // 3. Start New Drawing
         this.isDrawing = true;
         const curPrice = priceInfo.price;
+        const startTime = this.xToTime(pos.x);
+        const barSec = this.getBarSeconds();
+        const endTime = startTime + barSec * 8;
         const isLong = this.activeTool === 'long_pos';
         const isShort = this.activeTool === 'short_pos';
         const defaultRisk = (maxPrice - minPrice) * 0.12;
@@ -878,9 +885,9 @@
           slPrice: isLong ? curPrice - defaultRisk : (isShort ? curPrice + defaultRisk : curPrice),
           startPrice: curPrice,
           endPrice: curPrice,
-          startTime: priceInfo.time,
-          endTime: priceInfo.time,
-          points: [pos]
+          startTime: startTime,
+          endTime: endTime,
+          points: [{ x: pos.x, y: pos.y, time: startTime, price: curPrice }]
         };
       };
 
@@ -933,7 +940,7 @@
           const chartHeight = this.height - 35;
           const priceSpan = this.panStartPriceMax - this.panStartPriceMin;
           if (priceSpan > 0 && chartHeight > 0) {
-            const priceShift = (dy / chartHeight) * priceSpan;
+            const priceShift = (dy / chartHeight) * priceSpan * 0.9;
             this.priceScaleMode = 'manual';
             this.manualPriceMin = this.panStartPriceMin + priceShift;
             this.manualPriceMax = this.panStartPriceMax + priceShift;
@@ -943,12 +950,12 @@
           return;
         }
 
-        // 2. FAST PATH: Price axis dragging (vertical scale zoom)
+        // 2. FAST PATH: Price axis dragging (vertical scale zoom - calibrated for smooth Mac & desktop mouse)
         if (this.priceScaleDragging) {
           const dy = pos.y - this.priceScaleDragStartY;
           const range = this.priceScaleDragStartMax - this.priceScaleDragStartMin;
           const midPrice = (this.priceScaleDragStartMin + this.priceScaleDragStartMax) / 2;
-          const scaleFactor = Math.max(0.05, Math.min(10.0, 1 + dy / 150));
+          const scaleFactor = Math.max(0.15, Math.min(6.0, 1 + dy / 450));
           const newRange = range * scaleFactor;
           this.priceScaleMode = 'manual';
           this.manualPriceMin = midPrice - newRange / 2;
@@ -967,6 +974,8 @@
           const dx = pos.x - this.dragStartPos.x;
           const dy = pos.y - this.dragStartPos.y;
           const priceDelta = priceInfo.price - this.dragStartPrice;
+          const curTime = this.xToTime(pos.x);
+          const startTimeDelta = curTime - this.xToTime(this.dragStartPos.x);
 
           if (handleType === 'tp') {
             shape.tpPrice = priceInfo.price;
@@ -975,52 +984,66 @@
           } else if (handleType === 'entry') {
             shape.entryPrice = priceInfo.price;
           } else if (handleType === 'resize_width') {
+            shape.endTime = curTime;
             shape.endX = Math.max(shape.startX + 60, pos.x);
           } else if (handleType === 'move_all') {
             shape.entryPrice = parseFloat((snap.entryPrice + priceDelta).toFixed(2));
             shape.tpPrice = parseFloat((snap.tpPrice + priceDelta).toFixed(2));
             shape.slPrice = parseFloat((snap.slPrice + priceDelta).toFixed(2));
+            if (snap.startTime != null) shape.startTime = snap.startTime + startTimeDelta;
+            if (snap.endTime != null) shape.endTime = snap.endTime + startTimeDelta;
             shape.startX = snap.startX + dx;
             shape.endX = snap.endX + dx;
           } else if (handleType === 'move_fvg') {
+            if (snap.startPrice != null) shape.startPrice = parseFloat((snap.startPrice + priceDelta).toFixed(2));
+            if (snap.endPrice != null) shape.endPrice = parseFloat((snap.endPrice + priceDelta).toFixed(2));
+            if (snap.startTime != null) shape.startTime = snap.startTime + startTimeDelta;
+            if (snap.endTime != null) shape.endTime = snap.endTime + startTimeDelta;
             shape.startX = snap.startX + dx;
             shape.endX = snap.endX + dx;
             shape.startY = snap.startY + dy;
             shape.endY = snap.endY + dy;
-          } else if (handleType === 'move_liq') {
-            shape.startY = snap.startY + dy;
+          } else if (handleType === 'move_liq' || handleType === 'liquidity_text') {
             shape.startPrice = priceInfo.price;
+            shape.startY = snap.startY + dy;
           } else if (handleType === 'trendline_start') {
+            shape.startTime = curTime;
+            shape.startPrice = priceInfo.price;
             shape.startX = snap.startX + dx;
             shape.startY = snap.startY + dy;
           } else if (handleType === 'trendline_end') {
+            shape.endTime = curTime;
+            shape.endPrice = priceInfo.price;
             shape.endX = snap.endX + dx;
             shape.endY = snap.endY + dy;
           } else if (handleType === 'ote_start') {
-            shape.startY = snap.startY + dy;
-            shape.startX = snap.startX + dx;
+            shape.startTime = curTime;
             shape.startPrice = priceInfo.price;
+            shape.startX = snap.startX + dx;
+            shape.startY = snap.startY + dy;
           } else if (handleType === 'ote_end') {
-            shape.endY = snap.endY + dy;
-            shape.endX = snap.endX + dx;
+            shape.endTime = curTime;
             shape.endPrice = priceInfo.price;
+            shape.endX = snap.endX + dx;
+            shape.endY = snap.endY + dy;
           } else if (handleType === 'move_ote') {
+            if (snap.startPrice != null) shape.startPrice = parseFloat((snap.startPrice + priceDelta).toFixed(2));
+            if (snap.endPrice != null) shape.endPrice = parseFloat((snap.endPrice + priceDelta).toFixed(2));
+            if (snap.startTime != null) shape.startTime = snap.startTime + startTimeDelta;
+            if (snap.endTime != null) shape.endTime = snap.endTime + startTimeDelta;
             shape.startX = snap.startX + dx;
             shape.endX = snap.endX + dx;
             shape.startY = snap.startY + dy;
             shape.endY = snap.endY + dy;
-            const pStart = this.screenToPrice(shape.startX, shape.startY, minPrice, maxPrice);
-            const pEnd = this.screenToPrice(shape.endX, shape.endY, minPrice, maxPrice);
-            shape.startPrice = pStart.price;
-            shape.endPrice = pEnd.price;
           } else if (handleType === 'move_trendline' || handleType === 'trendline_text') {
+            if (snap.startPrice != null) shape.startPrice = parseFloat((snap.startPrice + priceDelta).toFixed(2));
+            if (snap.endPrice != null) shape.endPrice = parseFloat((snap.endPrice + priceDelta).toFixed(2));
+            if (snap.startTime != null) shape.startTime = snap.startTime + startTimeDelta;
+            if (snap.endTime != null) shape.endTime = snap.endTime + startTimeDelta;
             shape.startX = snap.startX + dx;
             shape.endX = snap.endX + dx;
             shape.startY = snap.startY + dy;
             shape.endY = snap.endY + dy;
-          } else if (handleType === 'liquidity_text') {
-            shape.startY = snap.startY + dy;
-            shape.startPrice = priceInfo.price;
           }
 
           this.requestRender();
@@ -1057,10 +1080,15 @@
           this.currentShape.endX = pos.x;
           this.currentShape.endY = pos.y;
           this.currentShape.endPrice = priceInfo.price;
-          this.currentShape.endTime = priceInfo.time;
+          this.currentShape.endTime = this.xToTime(pos.x);
 
           if (this.currentShape.type === 'brush') {
-            this.currentShape.points.push(pos);
+            this.currentShape.points.push({
+              x: pos.x,
+              y: pos.y,
+              time: this.xToTime(pos.x),
+              price: priceInfo.price
+            });
           }
         }
 
@@ -1087,16 +1115,30 @@
 
         if (this.isDrawing && this.currentShape) {
           const finishedShape = this.currentShape;
+          const barSec = this.getBarSeconds();
+          const visibleCandles = this.getVisibleCandlesSlice();
+          const range = this.calculatePriceRange(visibleCandles);
+          const priceSpan = range.maxPrice - range.minPrice || 50;
+
           if (finishedShape.type === 'ote') {
             if (Math.abs(finishedShape.endX - finishedShape.startX) < 25) {
               finishedShape.endX = finishedShape.startX + 180;
+              finishedShape.endTime = this.xToTime(finishedShape.endX);
             }
-            if (Math.abs(finishedShape.endY - finishedShape.startY) < 15) {
-              const visibleCandles = this.getVisibleCandlesSlice();
-              const range = this.calculatePriceRange(visibleCandles);
+            if (Math.abs(finishedShape.endPrice - finishedShape.startPrice) < 0.5) {
               finishedShape.endY = finishedShape.startY + 90;
-              const pInfo = this.screenToPrice(finishedShape.endX, finishedShape.endY, range.minPrice, range.maxPrice);
-              finishedShape.endPrice = pInfo.price;
+              finishedShape.endPrice = finishedShape.startPrice - priceSpan * 0.12;
+            }
+          } else if (finishedShape.type === 'fvg') {
+            if (Math.abs(finishedShape.endTime - finishedShape.startTime) < barSec * 0.5) {
+              finishedShape.endTime = finishedShape.startTime + barSec * 5;
+            }
+            if (Math.abs(finishedShape.endPrice - finishedShape.startPrice) < 0.25) {
+              finishedShape.endPrice = finishedShape.startPrice - priceSpan * 0.05;
+            }
+          } else if (finishedShape.type === 'long_pos' || finishedShape.type === 'short_pos') {
+            if (Math.abs(finishedShape.endTime - finishedShape.startTime) < barSec * 0.5) {
+              finishedShape.endTime = finishedShape.startTime + barSec * 12;
             }
           }
           this.undoStack.push([...this.drawings]);
@@ -1146,6 +1188,12 @@
         const mouseX = e.clientX - rect.left;
         const chartWidth = this.width - 75;
 
+        // Normalize delta values across Mac trackpad, Magic Mouse, and PC wheel
+        let normY = e.deltaY;
+        let normX = e.deltaX;
+        if (e.deltaMode === 1) { normY *= 18; normX *= 18; }
+        else if (e.deltaMode === 2) { normY *= 300; normX *= 300; }
+
         // Scrolling over the price axis = vertical price zoom (TradingView behavior)
         if (mouseX >= chartWidth) {
           const visibleCandles = this.getVisibleCandlesSlice();
@@ -1156,7 +1204,10 @@
           const curMax = this.priceScaleMode === 'manual' ? this.manualPriceMax : max + pad;
           const range = curMax - curMin;
           const mid = (curMin + curMax) / 2;
-          const scale = e.deltaY > 0 ? 1.15 : 0.85;
+
+          // Smooth calibrated price zoom step (not jumping 15% per micro-tick)
+          const zoomStep = Math.min(0.06, Math.max(0.015, Math.abs(normY) * 0.0008));
+          const scale = 1 + (normY > 0 ? zoomStep : -zoomStep);
           const newRange = range * scale;
           this.priceScaleMode = 'manual';
           this.manualPriceMin = mid - newRange / 2;
@@ -1165,10 +1216,26 @@
           return;
         }
 
-        // Scrolling over the chart area = horizontal zoom (change visible bar count)
-        const zoomDelta = Math.max(3, Math.round(this.visibleBarsCount * 0.12));
-        if (e.deltaY < 0) this.visibleBarsCount = Math.max(10, this.visibleBarsCount - zoomDelta);
-        else this.visibleBarsCount = Math.min(2600, this.visibleBarsCount + zoomDelta);
+        // Two-finger horizontal swipe on Mac trackpad = smooth horizontal chart pan
+        if (Math.abs(normX) > Math.abs(normY) && Math.abs(normX) > 2) {
+          const barWidth = this.getBarWidth();
+          const panBars = Math.round(normX / (barWidth * 1.6));
+          if (panBars !== 0) {
+            const allCandles = this.getVisibleCandles();
+            const maxPan = Math.max(0, (allCandles ? allCandles.length : 0) - 1);
+            this.panOffsetBars = Math.min(maxPan, Math.max(-25, this.panOffsetBars - panBars));
+            this.requestRender();
+            return;
+          }
+        }
+
+        // Scrolling over chart area = smooth calibrated zoom
+        const zoomStep = Math.max(1, Math.min(Math.round(this.visibleBarsCount * 0.035), Math.round(Math.abs(normY) * 0.045)));
+        if (normY < 0) {
+          this.visibleBarsCount = Math.max(12, this.visibleBarsCount - zoomStep);
+        } else {
+          this.visibleBarsCount = Math.min(650, this.visibleBarsCount + zoomStep);
+        }
 
         this.requestRender();
       }, { passive: false });
@@ -1235,6 +1302,7 @@
       const threshold = this.isTouchDevice ? 26 : 16;
       const allShapes = [...this.drawings];
       if (this.currentShape) allShapes.push(this.currentShape);
+      const barWidth = this.getBarWidth();
 
       for (let i = allShapes.length - 1; i >= 0; i--) {
         const shape = allShapes[i];
@@ -1249,8 +1317,8 @@
           const yEntry = this.priceToY(entryPrice, minPrice, maxPrice);
           const yTp = this.priceToY(tpPrice, minPrice, maxPrice);
           const ySl = this.priceToY(slPrice, minPrice, maxPrice);
-          const x1 = shape.startX;
-          const x2 = Math.max(shape.startX + 140, shape.endX);
+          const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const x2 = shape.endTime != null ? Math.max(x1 + 60, this.timeToX(shape.endTime, barWidth)) : Math.max(shape.startX + 140, shape.endX);
 
           // Check TP Handle
           if (x >= x1 - 10 && x <= x2 + 20 && Math.abs(y - yTp) <= threshold) {
@@ -1276,18 +1344,22 @@
 
         // 2. FVG Box
         if (shape.type === 'fvg') {
-          const x1 = Math.min(shape.startX, shape.endX);
-          const x2 = Math.max(shape.startX, shape.endX);
-          const y1 = Math.min(shape.startY, shape.endY);
-          const y2 = Math.max(shape.startY, shape.endY);
-          if (x >= x1 - 6 && x <= x2 + 6 && y >= y1 - 6 && y <= y2 + 6) {
+          const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+          const y1 = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+          const y2 = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
+          const left = Math.min(x1, x2);
+          const right = Math.max(x1, x2);
+          const top = Math.min(y1, y2);
+          const bottom = Math.max(y1, y2);
+          if (x >= left - 6 && x <= right + 6 && y >= top - 6 && y <= bottom + 6) {
             return { shape, handleType: 'move_fvg' };
           }
         }
 
         // 3. Liquidity Ray
         if (shape.type === 'liquidity') {
-          const yLiq = shape.startPrice ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+          const yLiq = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
           const chartWidth = this.width - 75;
           const midX = chartWidth / 2;
           if (Math.abs(x - midX) <= 50 && Math.abs(y - yLiq) <= threshold) {
@@ -1300,8 +1372,10 @@
 
         // 4. Trendline / Ray
         if (shape.type === 'trendline') {
-          const x1 = shape.startX, y1 = shape.startY;
-          const x2 = shape.endX, y2 = shape.endY;
+          const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const y1 = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+          const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+          const y2 = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
           const midX = (x1 + x2) / 2;
           const midY = (y1 + y2) / 2;
 
@@ -1325,29 +1399,27 @@
 
         // 5. OTE Fibonacci (Premium / Discount & OTE)
         if (shape.type === 'ote') {
-          const yStart = (shape.startPrice != null && minPrice !== undefined)
-            ? this.priceToY(shape.startPrice, minPrice, maxPrice)
-            : shape.startY;
-          const yEnd = (shape.endPrice != null && minPrice !== undefined)
-            ? this.priceToY(shape.endPrice, minPrice, maxPrice)
-            : shape.endY;
+          const startAnchorX = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const endAnchorX = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+          const yStart = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+          const yEnd = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
 
           // Anchor 1 handle (start point)
-          if (Math.hypot(x - shape.startX, y - yStart) <= threshold) {
+          if (Math.hypot(x - startAnchorX, y - yStart) <= threshold) {
             return { shape, handleType: 'ote_start' };
           }
           // Anchor 2 handle (end point)
-          if (Math.hypot(x - shape.endX, y - yEnd) <= threshold) {
+          if (Math.hypot(x - endAnchorX, y - yEnd) <= threshold) {
             return { shape, handleType: 'ote_end' };
           }
 
           // Inside the bounded Fibonacci box
-          const x1 = Math.min(shape.startX, shape.endX);
-          const x2 = Math.max(shape.startX, shape.endX);
-          const y1 = Math.min(yStart, yEnd);
-          const y2 = Math.max(yStart, yEnd);
+          const left = Math.min(startAnchorX, endAnchorX);
+          const right = Math.max(startAnchorX, endAnchorX);
+          const top = Math.min(yStart, yEnd);
+          const bottom = Math.max(yStart, yEnd);
 
-          if (x >= x1 - 8 && x <= x2 + 8 && y >= y1 - 8 && y <= y2 + 8) {
+          if (x >= left - 8 && x <= right + 8 && y >= top - 8 && y <= bottom + 8) {
             return { shape, handleType: 'move_ote' };
           }
         }
@@ -1381,18 +1453,7 @@
 
       const chartHeight = this.height - 35;
       const price = maxPrice - (y / chartHeight) * priceRange;
-
-      const barWidth = this.getBarWidth();
-      const slot = Math.floor(x / barWidth);
-      const visibleCandles = this.getVisibleCandlesSlice();
-      let targetCandle = null;
-      for (let i = 0; i < visibleCandles.length; i++) {
-        if (this.getCandleSlot(i, visibleCandles.length) === slot) {
-          targetCandle = visibleCandles[i];
-          break;
-        }
-      }
-      const time = targetCandle ? targetCandle.time : this.getCurrentTime();
+      const time = this.xToTime(x);
 
       return { price: parseFloat(price.toFixed(2)), time };
     }
@@ -1414,6 +1475,108 @@
       const range = maxPrice - minPrice;
       if (range === 0) return chartHeight / 2;
       return chartHeight - ((price - minPrice) / range) * chartHeight;
+    }
+
+    getBarSeconds() {
+      const tf = this.activeTf || '5m';
+      if (tf === '1m') return 60;
+      if (tf === '5m') return 300;
+      if (tf === '15m') return 900;
+      if (tf === '1h') return 3600;
+      if (tf === '1d' || tf === 'Daily') return 86400;
+      return 300;
+    }
+
+    timeToCandleIndex(time) {
+      const allCandles = this.getVisibleCandles();
+      if (!allCandles || allCandles.length === 0) return 0;
+      const barSec = this.getBarSeconds();
+
+      if (time <= allCandles[0].time) {
+        return (time - allCandles[0].time) / barSec;
+      }
+      const last = allCandles.length - 1;
+      if (time >= allCandles[last].time) {
+        return last + (time - allCandles[last].time) / barSec;
+      }
+
+      let low = 0, high = last;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (allCandles[mid].time === time) return mid;
+        if (allCandles[mid].time < time) low = mid + 1;
+        else high = mid - 1;
+      }
+      const i0 = Math.max(0, high);
+      const i1 = Math.min(last, low);
+      if (i0 === i1) return i0;
+      const t0 = allCandles[i0].time;
+      const t1 = allCandles[i1].time;
+      const dt = t1 - t0;
+      const frac = dt > 0 ? (time - t0) / dt : 0;
+      return i0 + frac;
+    }
+
+    candleIndexToX(candleIndex, customBarWidth) {
+      const barWidth = customBarWidth || this.getBarWidth();
+      const allCandles = this.getVisibleCandles();
+      const totalCandles = allCandles ? allCandles.length : 0;
+      const endIndex = Math.max(0, Math.min(totalCandles - 1, totalCandles - 1 - this.panOffsetBars));
+
+      let rightSlot;
+      if (totalCandles <= this.visibleBarsCount) {
+        rightSlot = this.visibleBarsCount - 1 + this.panOffsetBars;
+      } else {
+        const rightMargin = Math.max(0, -this.panOffsetBars);
+        rightSlot = this.visibleBarsCount - 1 - rightMargin;
+      }
+      const slot = rightSlot - (endIndex - candleIndex);
+      return slot * barWidth + barWidth / 2;
+    }
+
+    timeToX(time, customBarWidth) {
+      if (time == null || isNaN(time)) return null;
+      const cIdx = this.timeToCandleIndex(time);
+      return this.candleIndexToX(cIdx, customBarWidth);
+    }
+
+    xToCandleIndex(x) {
+      const barWidth = this.getBarWidth();
+      const allCandles = this.getVisibleCandles();
+      const totalCandles = allCandles ? allCandles.length : 0;
+      const endIndex = Math.max(0, Math.min(totalCandles - 1, totalCandles - 1 - this.panOffsetBars));
+
+      let rightSlot;
+      if (totalCandles <= this.visibleBarsCount) {
+        rightSlot = this.visibleBarsCount - 1 + this.panOffsetBars;
+      } else {
+        const rightMargin = Math.max(0, -this.panOffsetBars);
+        rightSlot = this.visibleBarsCount - 1 - rightMargin;
+      }
+      const slot = (x - barWidth / 2) / barWidth;
+      const candleIndex = endIndex - (rightSlot - slot);
+      return candleIndex;
+    }
+
+    xToTime(x) {
+      const cIdx = this.xToCandleIndex(x);
+      const allCandles = this.getVisibleCandles();
+      if (!allCandles || allCandles.length === 0) return this.getCurrentTime() || 0;
+      const last = allCandles.length - 1;
+      const barSec = this.getBarSeconds();
+
+      if (cIdx <= 0) {
+        return allCandles[0].time + Math.round(cIdx * barSec);
+      }
+      if (cIdx >= last) {
+        return allCandles[last].time + Math.round((cIdx - last) * barSec);
+      }
+
+      const floorIdx = Math.floor(cIdx);
+      const frac = cIdx - floorIdx;
+      const t0 = allCandles[floorIdx].time;
+      const t1 = allCandles[floorIdx + 1].time;
+      return Math.round(t0 + frac * (t1 - t0));
     }
 
     calculatePriceRange(candles) {
@@ -1830,57 +1993,60 @@
       allShapes.forEach(shape => {
         ctx.save();
         if (shape.type === 'fvg') {
-          const x1 = Math.min(shape.startX, shape.endX);
-          const x2 = Math.max(shape.startX, shape.endX);
-          const y1 = Math.min(shape.startY, shape.endY);
-          const y2 = Math.max(shape.startY, shape.endY);
-          const isBull = shape.startY > shape.endY;
+          const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+          const y1 = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+          const y2 = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
+
+          const left = Math.min(x1, x2);
+          const right = Math.max(x1, x2);
+          const top = Math.min(y1, y2);
+          const bottom = Math.max(y1, y2);
+          const wBox = Math.max(4, right - left);
+          const hBox = Math.max(2, bottom - top);
+          const isBull = (shape.startPrice != null && shape.endPrice != null)
+            ? (shape.startPrice < shape.endPrice)
+            : (shape.startY > shape.endY);
 
           ctx.fillStyle = isBull ? "rgba(16, 185, 129, 0.28)" : "rgba(239, 68, 68, 0.28)";
           ctx.strokeStyle = isBull ? "#10b981" : "#ef4444";
           ctx.lineWidth = 1.5;
-          ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
-          ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+          ctx.fillRect(left, top, wBox, hBox);
+          ctx.strokeRect(left, top, wBox, hBox);
 
-          const midY = (y1 + y2) / 2;
+          const midY = (top + bottom) / 2;
           ctx.setLineDash([4, 4]);
           ctx.strokeStyle = isBull ? "#34d399" : "#f87171";
           ctx.beginPath();
-          ctx.moveTo(x1, midY);
-          ctx.lineTo(x2, midY);
+          ctx.moveTo(left, midY);
+          ctx.lineTo(right, midY);
           ctx.stroke();
           ctx.setLineDash([]);
 
           ctx.fillStyle = isBull ? "#10b981" : "#ef4444";
           ctx.font = "bold 10px monospace";
-          ctx.fillText(`+FVG (CE 50%)`, x1 + 6, midY - 4);
+          ctx.fillText(`+FVG (CE 50%)`, left + 6, midY - 4);
         } else if (shape.type === 'liquidity') {
-          const y = shape.startY;
+          const y = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+          const x1 = shape.startTime != null ? Math.max(0, this.timeToX(shape.startTime, barWidth)) : 0;
+          const x2 = this.width - 75;
           ctx.strokeStyle = "#a855f7";
           ctx.lineWidth = 1.8;
           ctx.setLineDash([5, 3]);
 
           const label = shape.text ? shape.text : "⚡ LIQUIDITY POOL (BSL / SSL)";
-          this.renderTextOnLine(ctx, 0, y, this.width - 75, y, label, "#c084fc", true);
+          this.renderTextOnLine(ctx, x1, y, x2, y, label, "#c084fc", true);
           ctx.setLineDash([]);
         } else if (shape.type === 'ote') {
           // Bounded Fibonacci Retracement (Topstep / TradingView Style)
-          const x1 = Math.min(shape.startX, shape.endX);
-          const x2 = Math.max(shape.startX, shape.endX);
+          const startAnchorX = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const endAnchorX = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+          const yStart = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+          const yEnd = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
+
+          const x1 = Math.min(startAnchorX, endAnchorX);
+          const x2 = Math.max(startAnchorX, endAnchorX);
           const boxWidth = Math.max(20, x2 - x1);
-
-          // Pinned price-to-Y coordinates
-          const yStart = (shape.startPrice != null && minPrice !== undefined)
-            ? this.priceToY(shape.startPrice, minPrice, maxPrice)
-            : shape.startY;
-          const yEnd = (shape.endPrice != null && minPrice !== undefined)
-            ? this.priceToY(shape.endPrice, minPrice, maxPrice)
-            : shape.endY;
-
-          const startAnchorX = shape.startX;
-          const startAnchorY = yStart;
-          const endAnchorX = shape.endX;
-          const endAnchorY = yEnd;
 
           const dy = yEnd - yStart;
           const isDownward = dy > 0;
@@ -1999,8 +2165,8 @@
           const yTp = this.priceToY(tpPrice, minPrice, maxPrice);
           const ySl = this.priceToY(slPrice, minPrice, maxPrice);
 
-          const x1 = shape.startX;
-          const x2 = Math.max(shape.startX + 150, shape.endX);
+          const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const x2 = shape.endTime != null ? Math.max(x1 + 60, this.timeToX(shape.endTime, barWidth)) : Math.max(x1 + 150, shape.endX);
 
           const riskPts = Math.abs(entryPrice - slPrice);
           const rewardPts = Math.abs(tpPrice - entryPrice);
@@ -2070,14 +2236,19 @@
           ctx.font = "bold 10px monospace";
           ctx.fillText(`⚡ R:R 1:${rrRatio} (Drag to adjust)`, x1 + 10, yEntry - 8);
         } else if (shape.type === 'trendline') {
+          const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const y1 = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+          const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+          const y2 = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
+
           ctx.strokeStyle = "#60a5fa";
           ctx.lineWidth = 2;
-          this.renderTextOnLine(ctx, shape.startX, shape.startY, shape.endX, shape.endY, shape.text, "#60a5fa", false);
+          this.renderTextOnLine(ctx, x1, y1, x2, y2, shape.text, "#60a5fa", false);
 
           // Subtle center handle dot when no text is present
           if (!shape.text) {
-            const midX = (shape.startX + shape.endX) / 2;
-            const midY = (shape.startY + shape.endY) / 2;
+            const midX = (x1 + x2) / 2;
+            const midY = (y1 + y2) / 2;
             ctx.fillStyle = "#60a5fa";
             ctx.beginPath();
             ctx.arc(midX, midY, 3, 0, Math.PI * 2);
@@ -2088,8 +2259,10 @@
           ctx.lineWidth = 2.2;
           ctx.beginPath();
           shape.points.forEach((p, idx) => {
-            if (idx === 0) ctx.moveTo(p.x, p.y);
-            else ctx.lineTo(p.x, p.y);
+            const px = p.time != null ? this.timeToX(p.time, barWidth) : p.x;
+            const py = p.price != null ? this.priceToY(p.price, minPrice, maxPrice) : p.y;
+            if (idx === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
           });
           ctx.stroke();
         }
@@ -2641,6 +2814,12 @@
         const mouseX = e.clientX - rect.left;
         const chartWidth = this.secondaryWidth - 75;
 
+        // Normalize delta values across Mac trackpad, Magic Mouse, and PC wheel
+        let normY = e.deltaY;
+        let normX = e.deltaX;
+        if (e.deltaMode === 1) { normY *= 18; normX *= 18; }
+        else if (e.deltaMode === 2) { normY *= 300; normX *= 300; }
+
         // Scrolling over price axis: vertical price zoom on secondary
         if (mouseX >= chartWidth) {
           const secCandles = this.getSecondaryCandles();
@@ -2650,7 +2829,9 @@
           const { minPrice, maxPrice } = this.calculateSecondaryPriceRange(visibleCandles);
           const range = maxPrice - minPrice;
           const mid = (minPrice + maxPrice) / 2;
-          const scale = e.deltaY > 0 ? 1.15 : 0.85;
+
+          const zoomStep = Math.min(0.06, Math.max(0.015, Math.abs(normY) * 0.0008));
+          const scale = 1 + (normY > 0 ? zoomStep : -zoomStep);
           const newRange = range * scale;
           this.secondaryPriceScaleMode = 'manual';
           this.secondaryManualPriceMin = mid - newRange / 2;
@@ -2659,10 +2840,23 @@
           return;
         }
 
+        // Two-finger horizontal swipe on Mac trackpad = smooth horizontal chart pan
+        if (Math.abs(normX) > Math.abs(normY) && Math.abs(normX) > 2) {
+          const barWidth = this.getBarWidth();
+          const panBars = Math.round(normX / (barWidth * 1.6));
+          if (panBars !== 0) {
+            const allCandles = this.getVisibleCandles();
+            const maxPan = Math.max(0, (allCandles ? allCandles.length : 0) - 1);
+            this.panOffsetBars = Math.min(maxPan, Math.max(-25, this.panOffsetBars - panBars));
+            this.requestRender();
+            return;
+          }
+        }
+
         // Scrolling over chart: horizontal bar count zoom on BOTH charts in lockstep
-        const zoomDelta = Math.max(3, Math.round(this.visibleBarsCount * 0.12));
-        if (e.deltaY < 0) this.visibleBarsCount = Math.max(10, this.visibleBarsCount - zoomDelta);
-        else this.visibleBarsCount = Math.min(2600, this.visibleBarsCount + zoomDelta);
+        const zoomStep = Math.max(1, Math.min(Math.round(this.visibleBarsCount * 0.035), Math.round(Math.abs(normY) * 0.045)));
+        if (normY < 0) this.visibleBarsCount = Math.max(12, this.visibleBarsCount - zoomStep);
+        else this.visibleBarsCount = Math.min(650, this.visibleBarsCount + zoomStep);
 
         this.requestRender();
       }, { passive: false });

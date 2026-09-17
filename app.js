@@ -159,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (resetBtn) {
     resetBtn.addEventListener('click', resetPaperAccount);
   }
+  setupJournalListeners();
 
   const chartTradeBtn = document.getElementById('chartQuickTradeBtn');
   if (chartTradeBtn) {
@@ -1980,7 +1981,13 @@ window.closePaperPosition = function(posId) {
 };
 
 async function resetPaperAccount() {
-  if (confirm("Are you sure you want to reset your simulated paper trading balance to $25,000?")) {
+  if (confirm("Are you sure you want to clear your completed backtest trades journal and reset your balance to $25,000.00?")) {
+    if (window.ReplayJournalStore) {
+      window.ReplayJournalStore.clearJournal();
+    }
+    if (window.replayEngine) {
+      window.replayEngine.resetAccount();
+    }
     if (window.PaperEngine) {
       window.PaperEngine.resetAccount();
       showToast("Account balance reset to $25,000.00");
@@ -2574,16 +2581,27 @@ function initReplayBacktester() {
   };
 
   engine.onTradeEvent = (event, trade) => {
-    if (event === 'TAKE_PROFIT') {
-      audio.playConfluenceChime();
-      showToast(`🎯 TAKE PROFIT HIT! +$${trade.pnl.toFixed(2)} (+${trade.pts.toFixed(2)} pts)`);
-    } else if (event === 'STOP_LOSS') {
-      showToast(`🛑 STOP LOSS HIT: -$${Math.abs(trade.pnl).toFixed(2)} (${trade.pts.toFixed(2)} pts)`);
+    if (event === 'TAKE_PROFIT' || event === 'STOP_LOSS' || event === 'POSITION_CLOSED') {
+      trade.exitReason = event === 'POSITION_CLOSED' ? 'MANUAL' : event;
+      const record = window.ReplayJournalStore ? window.ReplayJournalStore.addTrade(trade, engine.scenario) : null;
+      const pnl = trade.pnl || 0;
+      const pts = trade.pts || 0;
+      const isWin = pnl > 0;
+      const isLoss = pnl < 0;
+
+      if (isWin) {
+        audio.playConfluenceChime();
+        showToast(`🎯 TRADE WON! +$${pnl.toFixed(2)} (+${pts.toFixed(2)} pts) ➔ Saved to Journal`);
+      } else if (isLoss) {
+        showToast(`🛑 TRADE LOST: -$${Math.abs(pnl).toFixed(2)} (${pts.toFixed(2)} pts) ➔ Saved to Journal`);
+      } else {
+        showToast(`⚖️ BREAKEVEN TRADE: $0.00 (0.00 pts) ➔ Saved to Journal`);
+      }
     } else if (event === 'ORDER_FILLED') {
       audio.playConfluenceChime();
       showToast(`⚡ Limit Order Filled: ${trade.side} @ ${trade.entryPrice.toFixed(2)}`);
-    } else if (event === 'POSITION_CLOSED') {
-      showToast(`Position Closed: ${trade.pnl >= 0 ? '+' : ''}$${trade.pnl.toFixed(2)}`);
+    } else if (event === 'ORDER_PLACED') {
+      showToast(`Limit Order Placed: ${trade.side} @ ${trade.entryPrice.toFixed(2)}`);
     }
   };
 }
@@ -3313,66 +3331,322 @@ window.nextPbQuiz = function() {
 };
 
 // ============================================================================
-// 9. BACKTEST JOURNAL & PERFORMANCE LOG
+// 9. BACKTEST JOURNAL & PERFORMANCE LOG (PERSISTENT MULTI-SESSION JOURNAL)
 // ============================================================================
-function updateBacktestJournalUI() {
-  if (!window.replayEngine) return;
-  const engine = window.replayEngine;
-  const stats = engine.getStats();
-  const trades = engine.account.trades;
+const REPLAY_JOURNAL_STORAGE_KEY = 'pb_backtest_trade_journal_v2';
+let currentJournalFilter = 'ALL';
+
+window.ReplayJournalStore = {
+  getTrades() {
+    try {
+      const data = localStorage.getItem(REPLAY_JOURNAL_STORAGE_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      console.error('Failed to read replay journal:', e);
+      return [];
+    }
+  },
+
+  addTrade(trade, scenarioInfo) {
+    try {
+      const trades = this.getTrades();
+      const pnl = parseFloat(trade.pnl || 0);
+      const pts = parseFloat(trade.pts || 0);
+      const isWin = pnl > 0;
+      const isLoss = pnl < 0;
+      const outcome = isWin ? 'WIN' : (isLoss ? 'LOSS' : 'BREAKEVEN');
+
+      const scenario = scenarioInfo || (window.replayEngine && window.replayEngine.scenario);
+      const symbol = (scenario && scenario.symbol) || 'MNQ';
+      const scenarioName = (scenario && scenario.name) || 'Historical Replay';
+      const scenarioId = (scenario && scenario.id) || 'default';
+
+      const now = new Date();
+      const timeStr = now.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+                      now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const record = {
+        id: 'trade_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        timestamp: trade.exitTime || trade.time || Math.floor(Date.now() / 1000),
+        dateTimeStr: timeStr,
+        scenarioId,
+        scenarioName,
+        symbol,
+        side: trade.side || 'BUY',
+        size: trade.size || 1,
+        model: trade.model || 'PB Trades Silver Bullet',
+        entryPrice: parseFloat((trade.entryPrice || 0).toFixed(2)),
+        exitPrice: parseFloat((trade.exitPrice || 0).toFixed(2)),
+        pts: parseFloat(pts.toFixed(2)),
+        pnl: parseFloat(pnl.toFixed(2)),
+        outcome: outcome, // 'WIN' | 'LOSS' | 'BREAKEVEN'
+        exitReason: trade.exitReason || trade.status || 'MANUAL'
+      };
+
+      trades.unshift(record);
+      localStorage.setItem(REPLAY_JOURNAL_STORAGE_KEY, JSON.stringify(trades));
+
+      updateBacktestJournalUI(currentJournalFilter);
+      updateJournalBadgeCounters();
+      return record;
+    } catch (e) {
+      console.error('Failed to add trade to journal:', e);
+      return null;
+    }
+  },
+
+  clearJournal() {
+    try {
+      localStorage.removeItem(REPLAY_JOURNAL_STORAGE_KEY);
+      if (window.replayEngine && window.replayEngine.account) {
+        window.replayEngine.account.trades = [];
+      }
+      updateBacktestJournalUI(currentJournalFilter);
+      updateJournalBadgeCounters();
+    } catch (e) {
+      console.error('Failed to clear journal:', e);
+    }
+  },
+
+  getStats() {
+    const allTrades = this.getTrades();
+    let wins = 0;
+    let losses = 0;
+    let breakevens = 0;
+    let totalRealizedPnL = 0;
+    let grossProfit = 0;
+    let grossLoss = 0;
+
+    allTrades.forEach(t => {
+      totalRealizedPnL += t.pnl;
+      if (t.outcome === 'WIN') {
+        wins++;
+        grossProfit += t.pnl;
+      } else if (t.outcome === 'LOSS') {
+        losses++;
+        grossLoss += Math.abs(t.pnl);
+      } else {
+        breakevens++;
+      }
+    });
+
+    const totalTrades = allTrades.length;
+    const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : '0.0';
+    const profitFactor = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : (grossProfit > 0 ? '99.99' : '0.00');
+
+    return {
+      totalTrades,
+      wins,
+      losses,
+      breakevens,
+      winRate,
+      totalRealizedPnL,
+      grossProfit,
+      grossLoss,
+      profitFactor
+    };
+  },
+
+  exportCSV() {
+    const trades = this.getTrades();
+    if (trades.length === 0) {
+      showToast("No trades to export.");
+      return;
+    }
+
+    const headers = ["Date/Time", "Symbol", "Scenario", "Side", "Size", "Model", "Entry", "Exit", "Points", "PnL ($)", "Outcome", "Exit Trigger"];
+    const rows = trades.map(t => [
+      `"${t.dateTimeStr || ''}"`,
+      `"${t.symbol}"`,
+      `"${t.scenarioName}"`,
+      t.side,
+      t.size,
+      `"${t.model}"`,
+      t.entryPrice,
+      t.exitPrice,
+      t.pts,
+      t.pnl,
+      t.outcome,
+      t.exitReason
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `pb_trades_journal_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("📥 Exported Journal to CSV!");
+  }
+};
+
+function updateJournalBadgeCounters() {
+  const store = window.ReplayJournalStore;
+  if (!store) return;
+  const trades = store.getTrades();
+  const count = trades.length;
+
+  const countBadge = document.getElementById('replayJournalCountBadge');
+  if (countBadge) countBadge.textContent = count;
+
+  const sidebarCountBadge = document.getElementById('sidebarJournalCountBadge');
+  if (sidebarCountBadge) sidebarCountBadge.textContent = count;
+
+  const filterAll = document.getElementById('jFilterCountAll');
+  if (filterAll) filterAll.textContent = count;
+
+  const winsCount = trades.filter(t => t.outcome === 'WIN').length;
+  const filterWins = document.getElementById('jFilterCountWin');
+  if (filterWins) filterWins.textContent = winsCount;
+
+  const lossesCount = trades.filter(t => t.outcome === 'LOSS').length;
+  const filterLosses = document.getElementById('jFilterCountLoss');
+  if (filterLosses) filterLosses.textContent = lossesCount;
+}
+
+function updateBacktestJournalUI(filterOutcome = currentJournalFilter) {
+  currentJournalFilter = filterOutcome;
+  const store = window.ReplayJournalStore;
+  if (!store) return;
+
+  const stats = store.getStats();
+  const allTrades = store.getTrades();
+  const trades = filterOutcome === 'ALL'
+    ? allTrades
+    : allTrades.filter(t => t.outcome === filterOutcome);
 
   const balEl = document.getElementById('paperBalanceDisplay');
   const pnlEl = document.getElementById('paperUnrealizedDisplay');
   const winRateEl = document.getElementById('paperWinRateDisplay');
   const pfEl = document.getElementById('paperProfitFactorDisplay');
 
-  if (balEl) balEl.textContent = `$${parseFloat(stats.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  const startBalance = 25000.00;
+  const curBalance = startBalance + stats.totalRealizedPnL;
+
+  if (balEl) balEl.textContent = `$${curBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   if (pnlEl) {
-    const pnl = parseFloat(stats.totalPnL);
-    pnlEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
-    pnlEl.style.color = pnl >= 0 ? 'var(--bullish)' : 'var(--bearish)';
+    pnlEl.textContent = `${stats.totalRealizedPnL >= 0 ? '+' : ''}$${stats.totalRealizedPnL.toFixed(2)}`;
+    pnlEl.style.color = stats.totalRealizedPnL >= 0 ? 'var(--bullish)' : 'var(--bearish)';
   }
-  if (winRateEl) winRateEl.textContent = `${stats.winRate}%`;
+  if (winRateEl) {
+    winRateEl.textContent = `${stats.winRate}% (${stats.wins}W - ${stats.losses}L)`;
+    winRateEl.style.color = parseFloat(stats.winRate) >= 50 ? 'var(--bullish)' : (stats.totalTrades > 0 ? 'var(--bearish)' : 'inherit');
+  }
   if (pfEl) pfEl.textContent = stats.profitFactor;
 
+  // Render Table
   const tbody = document.getElementById('backtestJournalTbody');
   if (tbody) {
     if (trades.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">
-            No backtested trades yet. Use the Replay Backtest tab to execute trades on historical candles.
+          <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 32px 16px;">
+            <div style="font-size: 24px; margin-bottom: 8px;">📓</div>
+            <div style="font-weight: 600; color: var(--text-light); margin-bottom: 4px;">No ${filterOutcome !== 'ALL' ? filterOutcome.toLowerCase() + ' ' : ''}trades recorded in journal yet</div>
+            <div style="font-size: 11px;">Execute trades in the Replay Backtest simulator using Market or Limit orders. Once Take Profit or Stop Loss is reached, your results will be logged here.</div>
           </td>
         </tr>
       `;
     } else {
       tbody.innerHTML = trades.map(t => {
         const isBull = t.side === 'BUY';
-        const isWin = t.pnl > 0;
-        const timeStr = t.time ? new Date(t.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--';
+        const isWin = t.outcome === 'WIN';
+        const isLoss = t.outcome === 'LOSS';
+        const outcomeBadge = isWin
+          ? `<span class="journal-badge journal-badge-win">🎯 WIN</span>`
+          : (isLoss ? `<span class="journal-badge journal-badge-loss">🛑 LOSS</span>` : `<span class="journal-badge journal-badge-be">⚖️ BE</span>`);
+
+        let triggerBadge = '';
+        if (t.exitReason === 'TAKE_PROFIT') {
+          triggerBadge = `<span class="badge-trigger trigger-tp">🎯 TP Hit</span>`;
+        } else if (t.exitReason === 'STOP_LOSS') {
+          triggerBadge = `<span class="badge-trigger trigger-sl">🛑 SL Hit</span>`;
+        } else {
+          triggerBadge = `<span class="badge-trigger trigger-manual">✋ Manual Close</span>`;
+        }
 
         return `
-          <tr>
-            <td>${timeStr}</td>
-            <td><strong>${engine.scenario.symbol}</strong></td>
-            <td><span class="${isBull ? 'badge-bullish' : 'badge-bearish'}">${t.side}</span></td>
-            <td>${t.model || 'PB Trades Model'}</td>
-            <td style="font-family: var(--font-mono);">${t.entryPrice.toFixed(2)}</td>
-            <td style="font-family: var(--font-mono);">${(t.exitPrice || 0).toFixed(2)}</td>
-            <td style="font-family: var(--font-mono); color: ${isWin ? 'var(--bullish)' : 'var(--bearish)'};">
-              ${isWin ? '+' : ''}${(t.pts || 0).toFixed(2)} pts
-            </td>
-            <td style="font-family: var(--font-mono); font-weight: 700; color: ${isWin ? 'var(--bullish)' : 'var(--bearish)'};">
-              ${isWin ? '+' : ''}$${(t.pnl || 0).toFixed(2)}
-            </td>
+          <tr class="journal-row ${isWin ? 'row-win' : (isLoss ? 'row-loss' : '')}">
+            <td style="font-size: 11px; color: var(--text-muted);">${t.dateTimeStr || '--'}</td>
             <td>
-              <span class="${isWin ? 'badge-bullish' : 'badge-bearish'}">${t.status}</span>
+              <strong style="color: var(--text-light);">${t.symbol}</strong>
+              <div style="font-size: 10px; color: var(--text-muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.scenarioName}</div>
             </td>
+            <td><span class="${isBull ? 'badge-bullish' : 'badge-bearish'}">${t.side}</span> <span style="font-size: 10px; color: var(--text-muted);">${t.size}x</span></td>
+            <td style="font-size: 11px;">${t.model}</td>
+            <td style="font-family: var(--font-mono);">${t.entryPrice.toFixed(2)}</td>
+            <td style="font-family: var(--font-mono);">${t.exitPrice.toFixed(2)}</td>
+            <td style="font-family: var(--font-mono); font-weight: 600; color: ${isWin ? 'var(--bullish)' : (isLoss ? 'var(--bearish)' : 'inherit')};">
+              ${t.pts >= 0 ? '+' : ''}${t.pts.toFixed(2)} pts
+            </td>
+            <td style="font-family: var(--font-mono); font-weight: 800; font-size: 13px; color: ${isWin ? 'var(--bullish)' : (isLoss ? 'var(--bearish)' : 'inherit')};">
+              ${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}
+            </td>
+            <td>${outcomeBadge}</td>
+            <td>${triggerBadge}</td>
           </tr>
         `;
       }).join('');
     }
   }
+}
+
+function setupJournalListeners() {
+  // Filter chips in Journal tab
+  document.querySelectorAll('.journal-filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.journal-filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const filter = chip.getAttribute('data-filter') || 'ALL';
+      updateBacktestJournalUI(filter);
+    });
+  });
+
+  // Export CSV
+  const exportBtn = document.getElementById('exportJournalCsvBtn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      if (window.ReplayJournalStore) window.ReplayJournalStore.exportCSV();
+    });
+  }
+
+  // Back to Replay Chart button
+  const backToReplayBtn = document.getElementById('journalBackToReplayBtn');
+  if (backToReplayBtn) {
+    backToReplayBtn.addEventListener('click', () => {
+      const replayTabBtn = document.querySelector('[data-tab="replayTab"]');
+      if (replayTabBtn) replayTabBtn.click();
+    });
+  }
+
+  // Buttons in Replay Tab to open Journal
+  const openJournalBtn = document.getElementById('replayOpenJournalBtn');
+  if (openJournalBtn) {
+    openJournalBtn.addEventListener('click', () => {
+      const paperTabBtn = document.querySelector('[data-tab="paperTab"]');
+      if (paperTabBtn) paperTabBtn.click();
+    });
+  }
+
+  const fsOpenJournalBtn = document.getElementById('fsOpenJournalBtn');
+  if (fsOpenJournalBtn) {
+    fsOpenJournalBtn.addEventListener('click', () => {
+      const paperTabBtn = document.querySelector('[data-tab="paperTab"]');
+      if (paperTabBtn) paperTabBtn.click();
+    });
+  }
+
+  const sidebarJournalBtn = document.getElementById('sidebarJournalBtn');
+  if (sidebarJournalBtn) {
+    sidebarJournalBtn.addEventListener('click', () => {
+      const paperTabBtn = document.querySelector('[data-tab="paperTab"]');
+      if (paperTabBtn) paperTabBtn.click();
+    });
+  }
+
+  updateJournalBadgeCounters();
 }
 
 // ============================================================================
