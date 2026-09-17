@@ -12,7 +12,7 @@
   <meta name="theme-color" content="#0a0e17">
   <link rel="manifest" href="manifest.json?v=5.0">
   <title>PB Trades ICT Replay Backtester & Academy</title>
-  <link rel="stylesheet" href="styles.css?v=10.4">
+  <link rel="stylesheet" href="styles.css?v=10.5">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230a0e17%22/><text x=%2250%22 y=%2270%22 font-size=%2265%22 text-anchor=%22middle%22>⚡</text></svg>">
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -42,6 +42,10 @@
 
       <button class="audio-toggle-btn active" id="audioToggleBtn" title="Toggle audio chime">
         🔔
+      </button>
+
+      <button class="audio-toggle-btn" id="desktopTouchModeBtn" title="Switch to Dedicated iPad/iPhone Touch UI" style="background: rgba(168, 85, 247, 0.18); border-color: rgba(168, 85, 247, 0.5); color: #c084fc; font-size: 11px; width: auto; padding: 0 10px; font-weight: 600; gap: 4px;">
+        📱 Touch UI
       </button>
 
       <button class="audio-toggle-btn" id="refreshBtn" title="Force Refresh App" onclick="window.location.reload(true)" style="background: rgba(6, 182, 212, 0.15); border-color: rgba(6, 182, 212, 0.4); color: #67e8f9;">
@@ -116,6 +120,32 @@
     <!-- ===================================================================== -->
     <section id="replayTab" class="tab-view active">
       
+      <!-- ===================================================================== -->
+      <!-- DEDICATED IPAD & IPHONE TOUCH TOP BAR (TOUCH-FIRST UI) -->
+      <!-- ===================================================================== -->
+      <div class="touch-top-bar" id="touchTopBar">
+        <div class="touch-top-left">
+          <button class="touch-pill-btn" id="touchSitBtn" title="Select Situation (Blind Replay)">
+            <span class="touch-pill-dot">⚡</span>
+            <span id="touchSitName">Sit 01</span>
+            <span class="touch-pill-arrow">▾</span>
+          </button>
+          <button class="touch-pill-btn" id="touchTfBtn" title="Select Timeframe">
+            <span id="touchTfName">5m</span>
+            <span class="touch-pill-arrow">▾</span>
+          </button>
+        </div>
+        <div class="touch-top-center">
+          <span class="touch-ticker-badge" id="touchPriceBadge">--</span>
+          <span class="touch-pnl-pill" id="touchPnlBadge">$0.00</span>
+        </div>
+        <div class="touch-top-right">
+          <button class="touch-icon-btn active" id="touchSessionsToggleBtn" title="Toggle Sessions Markouts (Asia/London/Midnight/PDH/PDL)">🕒</button>
+          <button class="touch-icon-btn" id="touchSmtToggleBtn" title="Toggle SMT Dual-Chart Split">◫</button>
+          <button class="touch-mode-btn" id="touchModeToggleBtn" title="Switch to Desktop Terminal UI">🖥️ Desktop</button>
+        </div>
+      </div>
+
       <!-- REPLAY CONTROLS & SCENARIO TOP STRIP -->
       <div class="replay-top-strip">
         <div class="situation-selector-bar">
@@ -527,6 +557,241 @@
         </div>
       </div>
 
+      <!-- ===================================================================== -->
+      <!-- DEDICATED IPAD & IPHONE TOUCH REPLAY MINI-BAR & BOTTOM DOCK -->
+      <!-- ===================================================================== -->
+      <div class="touch-replay-bar" id="touchReplayBar">
+        <div class="touch-replay-controls">
+          <button class="touch-rplay-btn" id="touchStepBackBtn" title="Step 1 Candle Back">⏮</button>
+          <button class="touch-rplay-btn touch-rplay-play" id="touchPlayPauseBtn" title="Play / Pause Replay">▶ PLAY</button>
+          <button class="touch-rplay-btn" id="touchStepFwdBtn" title="Step 1 Candle Forward">⏭</button>
+          <div class="touch-speed-group" id="touchSpeedGroup">
+            <button class="touch-speed-chip" data-speed="0.5">0.5x</button>
+            <button class="touch-speed-chip active" data-speed="1.0">1x</button>
+            <button class="touch-speed-chip" data-speed="2.0">2x</button>
+            <button class="touch-speed-chip" data-speed="5.0">5x</button>
+          </div>
+        </div>
+        <div class="touch-scrubber-row">
+          <input type="range" id="touchScrubber" min="0" max="100" value="20" class="timeline-slider touch-slider">
+          <div class="touch-time-readout" id="touchTimeReadout">09:30:00 NY</div>
+        </div>
+      </div>
+
+      <!-- ERGONOMIC BOTTOM THUMB DOCK -->
+      <nav class="touch-bottom-dock" id="touchBottomDock">
+        <button class="touch-dock-item" id="touchDockTradeBtn">
+          <span class="touch-dock-icon">⚡</span>
+          <span class="touch-dock-label">Trade</span>
+        </button>
+        <button class="touch-dock-item" id="touchDockToolsBtn">
+          <span class="touch-dock-icon">✏️</span>
+          <span class="touch-dock-label">Tools</span>
+        </button>
+        <button class="touch-dock-item active" id="touchDockReplayBtn">
+          <span class="touch-dock-icon">▶</span>
+          <span class="touch-dock-label">Replay</span>
+        </button>
+        <button class="touch-dock-item" id="touchDockJournalBtn">
+          <span class="touch-dock-icon">💼</span>
+          <span class="touch-dock-label">Journal</span>
+          <span class="touch-dock-badge" id="touchJournalBadge">0</span>
+        </button>
+        <button class="touch-dock-item" id="touchDockRandomBtn">
+          <span class="touch-dock-icon">🎲</span>
+          <span class="touch-dock-label">Random</span>
+        </button>
+      </nav>
+
+      <!-- TOUCH SHEETS BACKDROP OVERLAY -->
+      <div class="touch-sheet-backdrop" id="touchSheetBackdrop"></div>
+
+      <!-- 1. TOUCH EXECUTION SHEET -->
+      <div class="touch-sheet" id="touchTradeSheet">
+        <div class="touch-sheet-handle"></div>
+        <div class="touch-sheet-header">
+          <div class="touch-sheet-title">⚡ Touch Execution Pad</div>
+          <button class="touch-sheet-close" id="touchTradeCloseBtn">✕</button>
+        </div>
+        <div class="touch-sheet-body">
+          <div class="touch-exec-price-row">
+            <span class="touch-exec-sym">MNQ (Nasdaq-100)</span>
+            <span class="touch-exec-price" id="touchTradeLivePrice">--</span>
+          </div>
+
+          <!-- BIG THUMB BUY & SELL BUTTONS -->
+          <div class="touch-exec-action-buttons">
+            <button class="touch-buy-btn" id="touchBuyBtn">
+              <span class="touch-btn-main">🟢 BUY MKT</span>
+              <span class="touch-btn-sub">Ask Price</span>
+            </button>
+            <button class="touch-sell-btn" id="touchSellBtn">
+              <span class="touch-btn-main">🔴 SELL MKT</span>
+              <span class="touch-btn-sub">Bid Price</span>
+            </button>
+          </div>
+
+          <!-- LOT SIZE STEPPER -->
+          <div class="touch-sheet-section">
+            <div class="touch-section-label">Order Quantity:</div>
+            <div class="touch-qty-stepper-row">
+              <button class="touch-stepper-btn" id="touchQtyMinusBtn">−</button>
+              <span class="touch-qty-val" id="touchQtyValue">1 Contract</span>
+              <button class="touch-stepper-btn" id="touchQtyPlusBtn">+</button>
+            </div>
+            <div class="touch-qty-preset-chips" id="touchQtyPresets">
+              <button class="touch-qty-chip active" data-qty="1">1</button>
+              <button class="touch-qty-chip" data-qty="2">2</button>
+              <button class="touch-qty-chip" data-qty="5">5</button>
+              <button class="touch-qty-chip" data-qty="10">10</button>
+            </div>
+          </div>
+
+          <!-- SL & TP PRESETS & INPUTS -->
+          <div class="touch-sheet-section">
+            <div class="touch-section-label">Risk Management (SL & TP):</div>
+            <div class="touch-sltp-row">
+              <div class="touch-input-group">
+                <label>Stop Loss (SL):</label>
+                <input type="number" id="touchSlInput" placeholder="SL Price" step="0.25" class="touch-input">
+              </div>
+              <div class="touch-input-group">
+                <label>Take Profit (TP):</label>
+                <input type="number" id="touchTpInput" placeholder="TP Price" step="0.25" class="touch-input">
+              </div>
+            </div>
+            <div class="touch-sltp-chips" id="touchSlPresets">
+              <span class="touch-chip-label">Quick SL:</span>
+              <button class="touch-preset-chip" data-offset="10">10 pts</button>
+              <button class="touch-preset-chip" data-offset="20">20 pts</button>
+              <button class="touch-preset-chip" data-offset="30">30 pts</button>
+              <button class="touch-preset-chip" data-offset="50">50 pts</button>
+            </div>
+            <button class="touch-snap-btn" id="touchSnapBracketBtn">
+              🎯 Snap SL & TP from On-Chart Position Drawing
+            </button>
+          </div>
+
+          <!-- ACTIVE OPEN POSITION CARD -->
+          <div class="touch-open-pos-card" id="touchOpenPosCard" style="display: none;">
+            <div class="touch-pos-header">
+              <span class="touch-pos-side" id="touchPosSideTag">LONG 1x</span>
+              <span class="touch-pos-pnl" id="touchPosPnlTag">+$0.00 (0 pts)</span>
+            </div>
+            <div class="touch-pos-details">
+              <div>Entry: <span id="touchPosEntryVal">--</span></div>
+              <div>Current: <span id="touchPosCurrentVal">--</span></div>
+            </div>
+            <button class="touch-close-pos-btn" id="touchClosePosBtn">✕ Close Position (Market)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. TOUCH TOOLS SHEET -->
+      <div class="touch-sheet" id="touchToolsSheet">
+        <div class="touch-sheet-handle"></div>
+        <div class="touch-sheet-header">
+          <div class="touch-sheet-title">✏️ ICT Drawing Tools</div>
+          <button class="touch-sheet-close" id="touchToolsCloseBtn">✕</button>
+        </div>
+        <div class="touch-sheet-body">
+          <div class="touch-tools-grid" id="touchToolsGrid">
+            <button class="touch-tool-tile active" data-tool="pointer">
+              <span class="touch-tile-icon">↖️</span>
+              <span class="touch-tile-label">Pointer / Pan</span>
+            </button>
+            <button class="touch-tool-tile" data-tool="fvg">
+              <span class="touch-tile-icon">🟩</span>
+              <span class="touch-tile-label">FVG Box</span>
+            </button>
+            <button class="touch-tool-tile" data-tool="liquidity">
+              <span class="touch-tile-icon">🟣</span>
+              <span class="touch-tile-label">Liquidity Ray</span>
+            </button>
+            <button class="touch-tool-tile" data-tool="ote">
+              <span class="touch-tile-icon">📐</span>
+              <span class="touch-tile-label">Fib / EQ</span>
+            </button>
+            <button class="touch-tool-tile" data-tool="long_pos">
+              <span class="touch-tile-icon">🟢</span>
+              <span class="touch-tile-label">Long Pos</span>
+            </button>
+            <button class="touch-tool-tile" data-tool="short_pos">
+              <span class="touch-tile-icon">🔴</span>
+              <span class="touch-tile-label">Short Pos</span>
+            </button>
+            <button class="touch-tool-tile" data-tool="trendline">
+              <span class="touch-tile-icon">📈</span>
+              <span class="touch-tile-label">Trendline</span>
+            </button>
+            <button class="touch-tool-tile" data-tool="brush">
+              <span class="touch-tile-icon">✏️</span>
+              <span class="touch-tile-label">Freehand Pen</span>
+            </button>
+            <button class="touch-tool-tile" data-tool="toggle_automarkup" id="touchAutoFvgTile">
+              <span class="touch-tile-icon">⚡</span>
+              <span class="touch-tile-label">Auto FVGs</span>
+            </button>
+            <button class="touch-tool-tile" id="touchUndoBtn">
+              <span class="touch-tile-icon">↩️</span>
+              <span class="touch-tile-label">Undo</span>
+            </button>
+            <button class="touch-tool-tile touch-tile-danger" id="touchClearDrawingsBtn">
+              <span class="touch-tile-icon">🗑️</span>
+              <span class="touch-tile-label">Clear All</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. TOUCH TIMEFRAME SHEET -->
+      <div class="touch-sheet" id="touchTfSheet">
+        <div class="touch-sheet-handle"></div>
+        <div class="touch-sheet-header">
+          <div class="touch-sheet-title">🕒 Select Timeframe</div>
+          <button class="touch-sheet-close" id="touchTfCloseBtn">✕</button>
+        </div>
+        <div class="touch-sheet-body">
+          <div class="touch-tf-grid" id="touchTfGrid">
+            <button class="touch-tf-btn" data-tf="1m">1m</button>
+            <button class="touch-tf-btn active" data-tf="5m">5m</button>
+            <button class="touch-tf-btn" data-tf="15m">15m</button>
+            <button class="touch-tf-btn" data-tf="30m">30m</button>
+            <button class="touch-tf-btn" data-tf="1h">1h</button>
+            <button class="touch-tf-btn" data-tf="4h">4h</button>
+            <button class="touch-tf-btn" data-tf="1d">Daily</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. TOUCH JOURNAL SHEET -->
+      <div class="touch-sheet" id="touchJournalSheet">
+        <div class="touch-sheet-handle"></div>
+        <div class="touch-sheet-header">
+          <div class="touch-sheet-title">💼 Backtest Trade Journal</div>
+          <button class="touch-sheet-close" id="touchJournalCloseBtn">✕</button>
+        </div>
+        <div class="touch-sheet-body">
+          <div class="touch-journal-metrics">
+            <div class="touch-metric-box">
+              <div class="touch-metric-val" id="touchJSimBalance">$100,000</div>
+              <div class="touch-metric-lbl">Sim Balance</div>
+            </div>
+            <div class="touch-metric-box">
+              <div class="touch-metric-val" id="touchJRealizedPnl">$0.00</div>
+              <div class="touch-metric-lbl">Realized P&L</div>
+            </div>
+            <div class="touch-metric-box">
+              <div class="touch-metric-val" id="touchJWinRate">0%</div>
+              <div class="touch-metric-lbl">Win Rate (W-L)</div>
+            </div>
+          </div>
+          <div class="touch-journal-trades-list" id="touchJournalTradesList">
+            <div class="touch-empty-journal">No closed trades yet. Take trades using the Trade pad!</div>
+          </div>
+        </div>
+      </div>
+
     </section>
 
 
@@ -874,11 +1139,11 @@
   <div class="toast-notification" id="toastBox">Notification</div>
 
   <!-- LOAD SCRIPTS IN ORDER -->
-  <script src="pb_academy_data.js?v=10.4"></script>
-  <script src="academy_data.js?v=10.4"></script>
-  <script src="replay_scenarios_data.js?v=10.4"></script>
-  <script src="engine.js?v=10.4"></script>
-  <script src="replay_engine.js?v=10.4"></script>
-  <script src="app.js?v=10.4"></script>
+  <script src="pb_academy_data.js?v=10.5"></script>
+  <script src="academy_data.js?v=10.5"></script>
+  <script src="replay_scenarios_data.js?v=10.5"></script>
+  <script src="engine.js?v=10.5"></script>
+  <script src="replay_engine.js?v=10.5"></script>
+  <script src="app.js?v=10.5"></script>
 </body>
 </html>

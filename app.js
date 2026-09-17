@@ -2058,6 +2058,9 @@ function initReplayBacktester() {
     engine.initSecondary(secCanvas);
   }
 
+  // Initialize Dedicated Touch-First UI for iPad & iPhone
+  setupTouchUIManager(engine);
+
   // 2b. Dual-Chart Layout Mode Pills (Single, Dual Side-by-Side SMT, Stacked)
   const allLayoutBtns = document.querySelectorAll('#replayLayoutPills .pill-btn, #fsLayoutPills .pill-btn');
   allLayoutBtns.forEach(btn => {
@@ -2644,11 +2647,16 @@ function setupSituationSelector(engine) {
 
   const prevBtns = [document.getElementById('prevSituationBtn'), document.getElementById('fsPrevSituationBtn')];
   const nextBtns = [document.getElementById('nextSituationBtn'), document.getElementById('fsNextSituationBtn')];
-  const pickerBtns = [document.getElementById('situationPickerBtn'), document.getElementById('fsSituationPickerBtn')];
+  const pickerBtns = [
+    document.getElementById('situationPickerBtn'), 
+    document.getElementById('fsSituationPickerBtn'),
+    document.getElementById('touchSitBtn')
+  ];
   const randomBtns = [
     document.getElementById('randomSituationBtn'),
     document.getElementById('fsRandomSituationBtn'),
-    document.getElementById('modalRandomSituationBtn')
+    document.getElementById('modalRandomSituationBtn'),
+    document.getElementById('touchDockRandomBtn')
   ];
 
   let currentFilter = 'all';
@@ -2668,6 +2676,8 @@ function setupSituationSelector(engine) {
     const sitName = scenario.name || 'Situation 01';
     if (currentNameEl) currentNameEl.textContent = sitName;
     if (fsNameEl) fsNameEl.textContent = `⚡ ${sitName.replace('Situation ', 'Sit ')}`;
+    const touchSitEl = document.getElementById('touchSitName');
+    if (touchSitEl) touchSitEl.textContent = `Sit ${sitName.replace('Situation ', '')}`;
 
     // Sync fallback select dropdown
     const select = document.getElementById('replayScenarioSelect');
@@ -2867,6 +2877,541 @@ function setupSituationSelector(engine) {
     if (origOnState) origOnState(state);
     if (engine.scenario) updateSituationLabels(engine.scenario);
   };
+}
+
+// ============================================================================
+// 6c. DEDICATED TOUCH-FIRST UI MANAGER FOR IPAD & IPHONE
+// ============================================================================
+function setupTouchUIManager(engine) {
+  // DOM Elements - Top Bar
+  const touchTopBar = document.getElementById('touchTopBar');
+  const touchSitBtn = document.getElementById('touchSitBtn');
+  const touchSitName = document.getElementById('touchSitName');
+  const touchTfBtn = document.getElementById('touchTfBtn');
+  const touchTfName = document.getElementById('touchTfName');
+  const touchPriceBadge = document.getElementById('touchPriceBadge');
+  const touchPnlBadge = document.getElementById('touchPnlBadge');
+  const touchSessionsBtn = document.getElementById('touchSessionsToggleBtn');
+  const touchSmtBtn = document.getElementById('touchSmtToggleBtn');
+  const touchModeToggleBtn = document.getElementById('touchModeToggleBtn');
+  const desktopTouchModeBtn = document.getElementById('desktopTouchModeBtn');
+
+  // DOM Elements - Replay Mini-Bar
+  const touchReplayBar = document.getElementById('touchReplayBar');
+  const touchPlayPauseBtn = document.getElementById('touchPlayPauseBtn');
+  const touchStepBackBtn = document.getElementById('touchStepBackBtn');
+  const touchStepFwdBtn = document.getElementById('touchStepFwdBtn');
+  const touchSpeedChips = document.querySelectorAll('#touchSpeedGroup .touch-speed-chip');
+  const touchScrubber = document.getElementById('touchScrubber');
+  const touchTimeReadout = document.getElementById('touchTimeReadout');
+
+  // DOM Elements - Bottom Thumb Dock
+  const touchDockTradeBtn = document.getElementById('touchDockTradeBtn');
+  const touchDockToolsBtn = document.getElementById('touchDockToolsBtn');
+  const touchDockReplayBtn = document.getElementById('touchDockReplayBtn');
+  const touchDockJournalBtn = document.getElementById('touchDockJournalBtn');
+  const touchDockRandomBtn = document.getElementById('touchDockRandomBtn');
+  const touchJournalBadge = document.getElementById('touchJournalBadge');
+
+  // DOM Elements - Sliding Action Sheets & Backdrop
+  const touchBackdrop = document.getElementById('touchSheetBackdrop');
+  const allTouchSheets = document.querySelectorAll('.touch-sheet');
+
+  const touchTradeSheet = document.getElementById('touchTradeSheet');
+  const touchToolsSheet = document.getElementById('touchToolsSheet');
+  const touchTfSheet = document.getElementById('touchTfSheet');
+  const touchJournalSheet = document.getElementById('touchJournalSheet');
+
+  // Trade Sheet Controls
+  const touchTradeLivePrice = document.getElementById('touchTradeLivePrice');
+  const touchBuyBtn = document.getElementById('touchBuyBtn');
+  const touchSellBtn = document.getElementById('touchSellBtn');
+  const touchQtyMinusBtn = document.getElementById('touchQtyMinusBtn');
+  const touchQtyPlusBtn = document.getElementById('touchQtyPlusBtn');
+  const touchQtyValue = document.getElementById('touchQtyValue');
+  const touchQtyChips = document.querySelectorAll('#touchQtyPresets .touch-qty-chip');
+  const touchSlInput = document.getElementById('touchSlInput');
+  const touchTpInput = document.getElementById('touchTpInput');
+  const touchSlPresets = document.querySelectorAll('#touchSlPresets .touch-preset-chip');
+  const touchSnapBracketBtn = document.getElementById('touchSnapBracketBtn');
+  const touchOpenPosCard = document.getElementById('touchOpenPosCard');
+  const touchPosSideTag = document.getElementById('touchPosSideTag');
+  const touchPosPnlTag = document.getElementById('touchPosPnlTag');
+  const touchPosEntryVal = document.getElementById('touchPosEntryVal');
+  const touchPosCurrentVal = document.getElementById('touchPosCurrentVal');
+  const touchClosePosBtn = document.getElementById('touchClosePosBtn');
+
+  // Tools Sheet Controls
+  const touchToolTiles = document.querySelectorAll('#touchToolsGrid .touch-tool-tile');
+  const touchUndoBtn = document.getElementById('touchUndoBtn');
+  const touchClearDrawingsBtn = document.getElementById('touchClearDrawingsBtn');
+  const touchAutoFvgTile = document.getElementById('touchAutoFvgTile');
+
+  // Timeframe Sheet Controls
+  const touchTfBtns = document.querySelectorAll('#touchTfGrid .touch-tf-btn');
+
+  // Journal Sheet Controls
+  const touchJSimBalance = document.getElementById('touchJSimBalance');
+  const touchJRealizedPnl = document.getElementById('touchJRealizedPnl');
+  const touchJWinRate = document.getElementById('touchJWinRate');
+  const touchJournalTradesList = document.getElementById('touchJournalTradesList');
+
+  let currentQty = 1;
+
+  // --- SHEET MANAGEMENT ---
+  function openTouchSheet(sheet) {
+    if (!sheet) return;
+    allTouchSheets.forEach(s => s.classList.remove('open'));
+    if (touchBackdrop) touchBackdrop.classList.add('open');
+    sheet.classList.add('open');
+    if (sheet === touchJournalSheet) renderTouchJournal();
+    if (sheet === touchTradeSheet) syncTouchTradeSheet();
+  }
+
+  function closeAllTouchSheets() {
+    allTouchSheets.forEach(s => s.classList.remove('open'));
+    if (touchBackdrop) touchBackdrop.classList.remove('open');
+  }
+
+  if (touchBackdrop) {
+    touchBackdrop.addEventListener('click', closeAllTouchSheets);
+  }
+
+  ['touchTradeCloseBtn', 'touchToolsCloseBtn', 'touchTfCloseBtn', 'touchJournalCloseBtn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener('click', closeAllTouchSheets);
+  });
+
+  // --- MODE SWITCHING & DEVICE DETECTION ---
+  function isTouchDevice() {
+    return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth <= 1024);
+  }
+
+  function setTouchMode(enable, notify = true) {
+    closeAllTouchSheets();
+    if (enable) {
+      document.body.classList.add('touch-ui-active');
+      localStorage.setItem('pb_ui_mode', 'touch');
+      if (notify) showToast('📱 Touch-First UI Activated');
+    } else {
+      document.body.classList.remove('touch-ui-active');
+      localStorage.setItem('pb_ui_mode', 'desktop');
+      if (notify) showToast('🖥️ Desktop Terminal Activated');
+    }
+
+    // Smoothly re-render and resize the chart canvas to match dimensions
+    setTimeout(() => {
+      engine.resize();
+      engine.render();
+      if (engine.secondaryEngine) {
+        engine.secondaryEngine.resize();
+        engine.secondaryEngine.render();
+      }
+    }, 120);
+  }
+
+  // Bind Switch Buttons
+  if (desktopTouchModeBtn) {
+    desktopTouchModeBtn.addEventListener('click', () => setTouchMode(true));
+  }
+  if (touchModeToggleBtn) {
+    touchModeToggleBtn.addEventListener('click', () => setTouchMode(false));
+  }
+
+  // Load Preference or Auto-Detect
+  const savedMode = localStorage.getItem('pb_ui_mode');
+  if (savedMode === 'touch') {
+    setTouchMode(true, false);
+  } else if (savedMode === 'desktop') {
+    setTouchMode(false, false);
+  } else {
+    // Auto-detect touch devices
+    if (isTouchDevice()) {
+      setTouchMode(true, false);
+    }
+  }
+
+  // --- TOP BAR ACTIONS ---
+  if (touchTfBtn) {
+    touchTfBtn.addEventListener('click', () => openTouchSheet(touchTfSheet));
+  }
+
+  if (touchSessionsBtn) {
+    touchSessionsBtn.addEventListener('click', () => {
+      const active = engine.toggleSessions();
+      touchSessionsBtn.classList.toggle('active', !!active);
+      showToast(`🕒 Multi-Session Levels: ${active ? 'ON' : 'OFF'}`);
+    });
+  }
+
+  if (touchSmtBtn) {
+    touchSmtBtn.addEventListener('click', () => {
+      const currentLayout = engine.layoutMode || 'single';
+      const nextLayout = currentLayout === 'dual' ? 'single' : 'dual';
+      engine.setLayoutMode(nextLayout);
+      touchSmtBtn.classList.toggle('active', nextLayout === 'dual');
+      showToast(nextLayout === 'dual' ? '◫ SMT Dual Chart ON (NQ vs ES)' : '⬛ Single Chart Mode');
+    });
+  }
+
+  // --- BOTTOM DOCK ACTIONS ---
+  if (touchDockTradeBtn) {
+    touchDockTradeBtn.addEventListener('click', () => openTouchSheet(touchTradeSheet));
+  }
+
+  if (touchDockToolsBtn) {
+    touchDockToolsBtn.addEventListener('click', () => openTouchSheet(touchToolsSheet));
+  }
+
+  if (touchDockReplayBtn) {
+    touchDockReplayBtn.addEventListener('click', () => {
+      if (!touchReplayBar) return;
+      const isHidden = touchReplayBar.classList.contains('minimized');
+      if (isHidden) {
+        touchReplayBar.classList.remove('minimized');
+        touchDockReplayBtn.classList.add('active');
+      } else {
+        touchReplayBar.classList.add('minimized');
+        touchDockReplayBtn.classList.remove('active');
+      }
+    });
+  }
+
+  if (touchDockJournalBtn) {
+    touchDockJournalBtn.addEventListener('click', () => openTouchSheet(touchJournalSheet));
+  }
+
+  // --- REPLAY MINI-BAR CONTROLS ---
+  if (touchPlayPauseBtn) {
+    touchPlayPauseBtn.addEventListener('click', () => {
+      engine.togglePlay();
+      syncReplayPlayState();
+    });
+  }
+
+  if (touchStepBackBtn) {
+    touchStepBackBtn.addEventListener('click', () => {
+      engine.stepBackward();
+      syncTouchState();
+    });
+  }
+
+  if (touchStepFwdBtn) {
+    touchStepFwdBtn.addEventListener('click', () => {
+      engine.stepForward();
+      syncTouchState();
+    });
+  }
+
+  touchSpeedChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      touchSpeedChips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const speed = parseFloat(chip.getAttribute('data-speed')) || 1.0;
+      engine.setSpeed(speed);
+      showToast(`⚡ Replay Speed: ${speed}x`);
+    });
+  });
+
+  if (touchScrubber) {
+    touchScrubber.addEventListener('input', (e) => {
+      const pct = parseFloat(e.target.value);
+      engine.seekToPercent(pct);
+      syncTouchState();
+    });
+  }
+
+  function syncReplayPlayState() {
+    if (!touchPlayPauseBtn) return;
+    if (engine.isPlaying) {
+      touchPlayPauseBtn.textContent = '⏸ PAUSE';
+      touchPlayPauseBtn.classList.add('playing');
+    } else {
+      touchPlayPauseBtn.textContent = '▶ PLAY';
+      touchPlayPauseBtn.classList.remove('playing');
+    }
+  }
+
+  // --- TRADE EXECUTION SHEET ---
+  function updateQtyDisplay(qty) {
+    currentQty = Math.max(1, Math.min(50, qty));
+    if (touchQtyValue) touchQtyValue.textContent = `${currentQty} ${currentQty === 1 ? 'Contract' : 'Contracts'}`;
+    touchQtyChips.forEach(chip => {
+      const val = parseInt(chip.getAttribute('data-qty'), 10);
+      chip.classList.toggle('active', val === currentQty);
+    });
+  }
+
+  if (touchQtyMinusBtn) {
+    touchQtyMinusBtn.addEventListener('click', () => updateQtyDisplay(currentQty - 1));
+  }
+  if (touchQtyPlusBtn) {
+    touchQtyPlusBtn.addEventListener('click', () => updateQtyDisplay(currentQty + 1));
+  }
+
+  touchQtyChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const qty = parseInt(chip.getAttribute('data-qty'), 10) || 1;
+      updateQtyDisplay(qty);
+    });
+  });
+
+  touchSlPresets.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const curPrice = engine.getCurrentPrice();
+      if (!curPrice) return;
+      const pts = parseFloat(chip.getAttribute('data-offset')) || 10;
+      if (touchSlInput) {
+        touchSlInput.value = (curPrice - pts).toFixed(2);
+      }
+      showToast(`Set SL to ${pts} pts below price`);
+    });
+  });
+
+  if (touchSnapBracketBtn) {
+    touchSnapBracketBtn.addEventListener('click', () => {
+      const drawings = engine.drawings || [];
+      const posDrawing = [...drawings].reverse().find(d => d.type === 'long_pos' || d.type === 'short_pos');
+      if (!posDrawing) {
+        showToast('Draw a Long or Short position bracket first, then tap Snap');
+        return;
+      }
+      if (touchSlInput && posDrawing.slPrice != null) {
+        touchSlInput.value = posDrawing.slPrice.toFixed(2);
+      }
+      if (touchTpInput && posDrawing.tpPrice != null) {
+        touchTpInput.value = posDrawing.tpPrice.toFixed(2);
+      }
+      showToast(`🎯 Snapped SL (${posDrawing.slPrice?.toFixed(2)}) & TP (${posDrawing.tpPrice?.toFixed(2)})`);
+    });
+  }
+
+  if (touchBuyBtn) {
+    touchBuyBtn.addEventListener('click', () => {
+      const sl = parseFloat(touchSlInput?.value) || null;
+      const tp = parseFloat(touchTpInput?.value) || null;
+      engine.executeOrder('BUY', 'MARKET', null, currentQty, sl, tp);
+      syncTouchTradeSheet();
+      syncTouchState();
+      showToast(`🟢 Executed BUY ${currentQty}x MNQ`);
+    });
+  }
+
+  if (touchSellBtn) {
+    touchSellBtn.addEventListener('click', () => {
+      const sl = parseFloat(touchSlInput?.value) || null;
+      const tp = parseFloat(touchTpInput?.value) || null;
+      engine.executeOrder('SELL', 'MARKET', null, currentQty, sl, tp);
+      syncTouchTradeSheet();
+      syncTouchState();
+      showToast(`🔴 Executed SELL ${currentQty}x MNQ`);
+    });
+  }
+
+  if (touchClosePosBtn) {
+    touchClosePosBtn.addEventListener('click', () => {
+      engine.closeAllPositions();
+      syncTouchTradeSheet();
+      syncTouchState();
+      showToast('✋ Closed All Positions');
+    });
+  }
+
+  function syncTouchTradeSheet() {
+    const curPrice = engine.getCurrentPrice();
+    if (touchTradeLivePrice && curPrice) {
+      touchTradeLivePrice.textContent = `$${curPrice.toFixed(2)}`;
+    }
+
+    const pos = (engine.account && engine.account.positions && engine.account.positions.length > 0)
+      ? engine.account.positions[0]
+      : null;
+
+    if (pos && touchOpenPosCard) {
+      touchOpenPosCard.style.display = 'flex';
+      const side = pos.side.toUpperCase();
+      const pnl = pos.unrealizedPnl || 0;
+      const points = curPrice ? (side === 'BUY' ? curPrice - pos.entryPrice : pos.entryPrice - curPrice) : 0;
+      const isWin = pnl >= 0;
+
+      if (touchPosSideTag) {
+        touchPosSideTag.textContent = `${side === 'BUY' ? 'LONG' : 'SHORT'} ${pos.size}x`;
+        touchPosSideTag.style.color = side === 'BUY' ? '#10b981' : '#ef4444';
+      }
+      if (touchPosPnlTag) {
+        touchPosPnlTag.textContent = `${isWin ? '+' : ''}$${pnl.toFixed(2)} (${points >= 0 ? '+' : ''}${points.toFixed(2)} pts)`;
+        touchPosPnlTag.style.color = isWin ? '#10b981' : '#ef4444';
+      }
+      if (touchPosEntryVal) touchPosEntryVal.textContent = `$${pos.entryPrice.toFixed(2)}`;
+      if (touchPosCurrentVal) touchPosCurrentVal.textContent = curPrice ? `$${curPrice.toFixed(2)}` : '--';
+    } else if (touchOpenPosCard) {
+      touchOpenPosCard.style.display = 'none';
+    }
+  }
+
+  // --- DRAWING TOOLS SHEET ---
+  touchToolTiles.forEach(tile => {
+    const tool = tile.getAttribute('data-tool');
+    if (!tool) return;
+    tile.addEventListener('click', () => {
+      if (tool === 'toggle_automarkup') {
+        const active = engine.toggleAutoMarkup();
+        tile.classList.toggle('active', !!active);
+        showToast(`⚡ Auto FVGs: ${active ? 'ON' : 'OFF'}`);
+        return;
+      }
+      touchToolTiles.forEach(t => t.classList.remove('active'));
+      tile.classList.add('active');
+      engine.setTool(tool);
+      closeAllTouchSheets();
+      showToast(`✏️ ${tool.toUpperCase()} Tool Active • Tap & drag on chart`);
+    });
+  });
+
+  if (touchUndoBtn) {
+    touchUndoBtn.addEventListener('click', () => {
+      engine.undo();
+      showToast('↩️ Undid last markup');
+    });
+  }
+
+  if (touchClearDrawingsBtn) {
+    touchClearDrawingsBtn.addEventListener('click', () => {
+      engine.clearDrawings();
+      closeAllTouchSheets();
+      showToast('🗑️ Cleared all markups');
+    });
+  }
+
+  // --- TIMEFRAME SHEET ---
+  touchTfBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tf = btn.getAttribute('data-tf');
+      if (!tf) return;
+      touchTfBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      engine.setTimeframe(tf);
+      if (touchTfName) touchTfName.textContent = tf;
+      closeAllTouchSheets();
+      showToast(`🕒 Timeframe: ${tf}`);
+    });
+  });
+
+  // --- TRADE JOURNAL SHEET ---
+  function renderTouchJournal() {
+    if (!window.ReplayJournalStore) return;
+    const trades = window.ReplayJournalStore.getTrades();
+    const stats = window.ReplayJournalStore.getStats();
+
+    if (touchJSimBalance) touchJSimBalance.textContent = `$${stats.simulatedBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    if (touchJRealizedPnl) {
+      const isPos = stats.realizedPnl >= 0;
+      touchJRealizedPnl.textContent = `${isPos ? '+' : ''}$${stats.realizedPnl.toFixed(2)}`;
+      touchJRealizedPnl.style.color = isPos ? '#10b981' : '#ef4444';
+    }
+    if (touchJWinRate) {
+      touchJWinRate.textContent = `${stats.winRate}% (${stats.wins}W - ${stats.losses}L)`;
+    }
+    if (touchJournalBadge) {
+      touchJournalBadge.textContent = trades.length;
+    }
+
+    if (!touchJournalTradesList) return;
+    if (trades.length === 0) {
+      touchJournalTradesList.innerHTML = '<div class="touch-empty-journal">No closed trades yet. Use the Trade pad to take trades!</div>';
+      return;
+    }
+
+    touchJournalTradesList.innerHTML = [...trades].reverse().map(t => {
+      const isWin = t.outcome === 'WIN';
+      const isLoss = t.outcome === 'LOSS';
+      const outcomeClass = isWin ? 'win' : (isLoss ? 'loss' : 'be');
+      const badgeText = isWin ? '🎯 WIN' : (isLoss ? '🛑 LOSS' : '⚖️ BE');
+      const pnlText = `${t.netPnl >= 0 ? '+' : ''}$${t.netPnl.toFixed(2)}`;
+      const ptsText = `${t.points >= 0 ? '+' : ''}${t.points.toFixed(2)} pts`;
+      return `
+        <div class="touch-trade-item ${outcomeClass}">
+          <div class="touch-trade-left">
+            <span class="touch-trade-tag" style="color: ${isWin ? '#10b981' : (isLoss ? '#ef4444' : '#94a3b8')}">${badgeText} • ${t.side} ${t.size}x</span>
+            <span class="touch-trade-time">${t.exitTime || t.entryTime} (${t.scenarioName || 'Sit'})</span>
+          </div>
+          <div class="touch-trade-right">
+            <span class="touch-trade-pnl" style="color: ${isWin ? '#10b981' : (isLoss ? '#ef4444' : '#94a3b8')}">${pnlText}</span>
+            <span class="touch-trade-pts">${ptsText}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // --- STATE SYNCHRONIZATION ---
+  function syncTouchState() {
+    const curPrice = engine.getCurrentPrice();
+    if (curPrice && touchPriceBadge) {
+      touchPriceBadge.textContent = `$${curPrice.toFixed(2)}`;
+    }
+
+    // P&L Sync
+    const pos = (engine.account && engine.account.positions && engine.account.positions.length > 0)
+      ? engine.account.positions[0]
+      : null;
+    const realized = (engine.account && engine.account.realizedPnl) || 0;
+    const unrealized = pos ? (pos.unrealizedPnl || 0) : 0;
+    const totalPnl = realized + unrealized;
+
+    if (touchPnlBadge) {
+      const isPos = totalPnl >= 0;
+      touchPnlBadge.textContent = `${isPos ? '+' : ''}$${totalPnl.toFixed(2)}`;
+      touchPnlBadge.className = `touch-pnl-pill ${isPos ? '' : 'neg'}`;
+    }
+
+    // Time Readout & Scrubber
+    const curTime = engine.getCurrentTime();
+    if (curTime && touchTimeReadout) {
+      const d = new Date(curTime * 1000);
+      const hours = d.getUTCHours().toString().padStart(2, '0');
+      const mins = d.getUTCMinutes().toString().padStart(2, '0');
+      const secs = d.getUTCSeconds().toString().padStart(2, '0');
+      touchTimeReadout.textContent = `${hours}:${mins}:${secs} NY`;
+    }
+
+    if (touchScrubber && engine.raw1m && engine.raw1m.length > 0) {
+      const pct = (engine.current1mIndex / (engine.raw1m.length - 1)) * 100;
+      touchScrubber.value = Math.round(pct);
+    }
+
+    // Timeframe
+    if (touchTfName && engine.activeTf) {
+      touchTfName.textContent = engine.activeTf;
+    }
+
+    // Journal count badge
+    if (touchJournalBadge && window.ReplayJournalStore) {
+      touchJournalBadge.textContent = window.ReplayJournalStore.getTrades().length;
+    }
+
+    syncReplayPlayState();
+    syncTouchTradeSheet();
+  }
+
+  // Hook into engine events
+  const existingOnState = engine.onStateChange;
+  engine.onStateChange = (state) => {
+    if (existingOnState) existingOnState(state);
+    syncTouchState();
+  };
+
+  const existingOnTrade = engine.onTradeEvent;
+  engine.onTradeEvent = (event) => {
+    if (existingOnTrade) existingOnTrade(event);
+    syncTouchTradeSheet();
+    syncTouchState();
+    renderTouchJournal();
+  };
+
+  // Initial Sync
+  syncTouchState();
+  renderTouchJournal();
 }
 
 function setupScenarioModal(engine) {
