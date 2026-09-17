@@ -30,8 +30,8 @@
 }
 
 html {
-  height: 100%;
-  height: -webkit-fill-available;
+  height: 100vh;
+  min-height: 100vh;
   background-color: var(--bg-primary);
   margin: 0;
   padding: 0;
@@ -45,11 +45,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
   overflow-x: hidden;
-  min-height: 100%;
+  height: 100vh;
+  min-height: 100vh;
+  margin: 0;
   padding-top: 0;
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
-  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0;
 }
 
 @media (max-width: 1024px) {
@@ -3362,8 +3364,8 @@ html.touch-ui-active,
 body.touch-ui-active,
 html.touch-ui-active body {
   overflow: hidden !important;
-  height: 100% !important;
-  height: -webkit-fill-available !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
   width: 100vw !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -3409,8 +3411,8 @@ body.touch-ui-active .app-container {
   margin: 0 !important;
   max-width: 100vw !important;
   width: 100vw !important;
-  height: 100% !important;
-  height: -webkit-fill-available !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
   overflow: hidden !important;
 }
 
@@ -3418,8 +3420,8 @@ html.touch-ui-active #replayTab,
 body.touch-ui-active #replayTab {
   display: flex !important;
   flex-direction: column !important;
-  height: 100% !important;
-  height: -webkit-fill-available !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
   width: 100vw !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -3662,11 +3664,27 @@ body.touch-ui-active .touch-bottom-dock {
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
   border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-bottom: none !important;
   border-radius: 0 !important;
   margin: 0 !important;
   box-sizing: border-box !important;
   flex-shrink: 0;
-  z-index: 99 !important;
+  z-index: 1000 !important;
+}
+
+/* Extra downward extension to permanently eliminate any WebKit chin gap on iOS/iPadOS */
+html.touch-ui-active .touch-bottom-dock::after,
+body.touch-ui-active .touch-bottom-dock::after {
+  content: '' !important;
+  position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: 250px !important;
+  background: rgba(10, 14, 23, 0.98) !important;
+  pointer-events: none !important;
+  z-index: 999 !important;
 }
 
 .touch-dock-item {
@@ -4464,10 +4482,6 @@ body.touch-ui-active .touch-replay-bar.minimized {
     flex-shrink: 0 !important;
     gap: 3px !important;
   }
-  .touch-top-right {
-    flex-shrink: 0 !important;
-    gap: 3px !important;
-  }
   .touch-top-center {
     flex: 1 !important;
     min-width: 0 !important;
@@ -4496,22 +4510,26 @@ body.touch-ui-active .touch-replay-bar.minimized {
   #touchTfBtn {
     max-width: 44px !important;
   }
+  .touch-top-right {
+    flex-shrink: 0 !important;
+    gap: 2px !important;
+  }
   .touch-icon-btn {
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
-    font-size: 11.5px !important;
-    border-radius: 7px !important;
+    width: 25px !important;
+    height: 25px !important;
+    min-width: 25px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
     padding: 0 !important;
     flex-shrink: 0 !important;
   }
   .touch-mode-btn {
-    width: 28px !important;
-    height: 28px !important;
-    min-width: 28px !important;
+    width: 25px !important;
+    height: 25px !important;
+    min-width: 25px !important;
     padding: 0 !important;
-    font-size: 11.5px !important;
-    border-radius: 7px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
     flex-shrink: 0 !important;
     display: inline-flex !important;
     align-items: center !important;
@@ -4519,6 +4537,11 @@ body.touch-ui-active .touch-replay-bar.minimized {
   }
   .touch-mode-btn .touch-mode-label {
     display: none !important;
+  }
+  #touchRefreshBtn {
+    background: rgba(56, 189, 248, 0.14) !important;
+    border: 1px solid rgba(56, 189, 248, 0.4) !important;
+    color: #38bdf8 !important;
   }
   .touch-time-badge {
     font-size: 10px !important;
@@ -4598,6 +4621,8 @@ body.touch-ui-active .touch-replay-bar.minimized {
     border-radius: 0 !important;
     margin: 0 !important;
     border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-bottom: none !important;
+    z-index: 1000 !important;
   }
   html.touch-ui-active .replay-workspace,
   body.touch-ui-active .replay-workspace {
@@ -4671,6 +4696,7 @@ body.touch-ui-active .touch-replay-bar.minimized {
     border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
     background: rgba(10, 14, 23, 0.98) !important;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5) !important;
+    z-index: 1000 !important;
   }
   html.touch-ui-active .touch-dock-item,
   body.touch-ui-active .touch-dock-item {
@@ -4719,8 +4745,8 @@ body.touch-ui-active .touch-replay-bar.minimized {
 /* ========================================================================== */
 html.standalone-mode,
 body.standalone-mode {
-  height: 100% !important;
-  height: -webkit-fill-available !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
   overflow: hidden !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -4750,6 +4776,7 @@ html.standalone-mode .touch-bottom-dock {
   height: calc(54px + max(env(safe-area-inset-bottom, 0px), 14px)) !important;
   border-radius: 0 !important;
   margin: 0 !important;
+  z-index: 1000 !important;
 }
 
 /* ========================================================================== */
@@ -4812,6 +4839,7 @@ html.standalone-mode .touch-bottom-dock {
     gap: 36px !important;
     background: rgba(10, 14, 23, 0.98) !important;
     border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    z-index: 1000 !important;
   }
   html.touch-ui-active .touch-dock-item,
   body.touch-ui-active .touch-dock-item {
@@ -4900,6 +4928,7 @@ html.standalone-mode .touch-bottom-dock {
     gap: 20px !important;
     background: rgba(10, 14, 23, 0.98) !important;
     border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    z-index: 1000 !important;
   }
   html.touch-ui-active .touch-dock-item,
   body.touch-ui-active .touch-dock-item {
