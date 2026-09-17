@@ -12,14 +12,14 @@
   <meta name="theme-color" content="#0a0e17">
   <link rel="manifest" href="manifest.json?v=5.0">
   <title>PB Trades ICT Replay Backtester & Academy</title>
-  <link rel="stylesheet" href="styles.css?v=10.20">
+  <link rel="stylesheet" href="styles.css?v=10.21">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230a0e17%22/><text x=%2250%22 y=%2270%22 font-size=%2265%22 text-anchor=%22middle%22>⚡</text></svg>">
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
   <script>
     (function() {
       try {
-        var APP_VERSION = '10.20';
+        var APP_VERSION = '10.21';
         var storedVersion = localStorage.getItem('pb_app_version');
         if (storedVersion !== APP_VERSION) {
           localStorage.setItem('pb_app_version', APP_VERSION);
@@ -168,7 +168,7 @@
         <div class="touch-top-left">
           <button class="touch-pill-btn" id="touchSitBtn" title="Select Situation (Blind Replay)">
             <span class="touch-pill-dot">⚡</span>
-            <span id="touchSitName">Sit 01</span>
+            <span id="touchSitName">#1</span>
             <span class="touch-pill-arrow">▾</span>
           </button>
           <button class="touch-pill-btn" id="touchTfBtn" title="Select Timeframe">
@@ -195,7 +195,7 @@
           <span class="situation-bar-label">⚡ SITUATION:</span>
           <div class="situation-nav-cluster">
             <button class="sit-arrow-btn" id="prevSituationBtn" title="Previous Situation (◀)">◀</button>
-            <button class="sit-pill-trigger" id="situationPickerBtn" title="Open 25 Situations Drawer">
+            <button class="sit-pill-trigger" id="situationPickerBtn" title="Open Situations Drawer (75 Situations)">
               <span class="sit-indicator">●</span>
               <span class="sit-label-text" id="currentSituationName">Situation 01</span>
               <span class="sit-caret">▾</span>
@@ -1192,11 +1192,11 @@
   <div class="toast-notification" id="toastBox">Notification</div>
 
   <!-- LOAD SCRIPTS IN ORDER -->
-  <script src="pb_academy_data.js?v=10.20"></script>
-  <script src="academy_data.js?v=10.20"></script>
-  <script src="replay_scenarios_data.js?v=10.20"></script>
-  <script src="engine.js?v=10.20"></script>
-  <script src="replay_engine.js?v=10.20"></script>
-  <script src="app.js?v=10.20"></script>
+  <script src="pb_academy_data.js?v=10.21"></script>
+  <script src="academy_data.js?v=10.21"></script>
+  <script src="replay_scenarios_data.js?v=10.21"></script>
+  <script src="engine.js?v=10.21"></script>
+  <script src="replay_engine.js?v=10.21"></script>
+  <script src="app.js?v=10.21"></script>
 </body>
 </html>

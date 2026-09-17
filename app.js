@@ -2764,7 +2764,7 @@ function setupSituationSelector(engine) {
       const nameMatch = (scenario.name || '').match(/(\d+)/);
       if (idMatch) num = idMatch[0].padStart(2, '0');
       else if (nameMatch) num = nameMatch[0].padStart(2, '0');
-      touchSitEl.textContent = `Sit ${num}`;
+      touchSitEl.textContent = '#' + parseInt(num, 10);
     }
 
     // Sync fallback select dropdown
