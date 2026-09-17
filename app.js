@@ -2538,9 +2538,15 @@ function initReplayBacktester() {
 
     // Update Time Readout
     const timeReadout = document.getElementById('replayTimeReadout');
-    if (timeReadout && state.currentTime) {
+    if (state.currentTime) {
       const ny = window.ICTEngine.getNyTime(state.currentTime);
-      timeReadout.textContent = `${ny.hour.toString().padStart(2, '0')}:${ny.minute.toString().padStart(2, '0')} NY`;
+      const h = ny.hour.toString().padStart(2, '0');
+      const m = ny.minute.toString().padStart(2, '0');
+      const s = ny.second.toString().padStart(2, '0');
+      const formattedTime = `🕒 ${h}:${m}:${s} NY`;
+      if (timeReadout) timeReadout.textContent = formattedTime;
+      const touchTimeBadge = document.getElementById('touchTimeBadge');
+      if (touchTimeBadge) touchTimeBadge.textContent = formattedTime;
     }
 
     // Update Scrubber
@@ -3452,12 +3458,15 @@ function setupTouchUIManager(engine) {
 
     // Time Readout & Scrubber
     const curTime = engine.getCurrentTime();
-    if (curTime && touchTimeReadout) {
-      const d = new Date(curTime * 1000);
-      const hours = d.getUTCHours().toString().padStart(2, '0');
-      const mins = d.getUTCMinutes().toString().padStart(2, '0');
-      const secs = d.getUTCSeconds().toString().padStart(2, '0');
-      touchTimeReadout.textContent = `${hours}:${mins}:${secs} NY`;
+    if (curTime) {
+      const ny = window.ICTEngine.getNyTime(curTime);
+      const hours = ny.hour.toString().padStart(2, '0');
+      const mins = ny.minute.toString().padStart(2, '0');
+      const secs = ny.second.toString().padStart(2, '0');
+      const formattedTime = `🕒 ${hours}:${mins}:${secs} NY`;
+      if (touchTimeReadout) touchTimeReadout.textContent = formattedTime;
+      const touchTimeBadge = document.getElementById('touchTimeBadge');
+      if (touchTimeBadge) touchTimeBadge.textContent = formattedTime;
     }
 
     if (touchScrubber && engine.raw1m && engine.raw1m.length > 0) {

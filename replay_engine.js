@@ -2593,7 +2593,14 @@
       // Symbol & TF
       ctx.fillStyle = "#38bdf8";
       ctx.fillText(`${sym} • ${tf}`, curX, 22);
-      curX += ctx.measureText(`${sym} • ${tf} `).width + 8;
+      curX += ctx.measureText(`${sym} • ${tf} `).width + 6;
+
+      // Exact Candle NY Time
+      const nyTime = window.ICTEngine.getNyTime(candle.time);
+      const timeStr = `${nyTime.hour.toString().padStart(2, '0')}:${nyTime.minute.toString().padStart(2, '0')}:${nyTime.second.toString().padStart(2, '0')} NY`;
+      ctx.fillStyle = "#fbbf24";
+      ctx.fillText(`🕒 ${timeStr}`, curX, 22);
+      curX += ctx.measureText(`🕒 ${timeStr} `).width + 8;
 
       // O
       ctx.fillStyle = "#94a3b8";
