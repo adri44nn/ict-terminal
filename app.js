@@ -3628,9 +3628,37 @@ window.openLineLabelModal = function(shape, onSave) {
   }, 50);
 
   function closeLineModal() {
+    if (input) {
+      input.blur();
+    }
     modal.style.display = 'none';
     activeLineShapeForLabel = null;
     activeLineLabelSaveCallback = null;
+
+    // Reset iOS Safari keyboard scroll drift immediately and with timeouts
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+
+    setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      if (engine) {
+        engine.resize();
+        engine.render();
+      }
+    }, 100);
+
+    setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      if (engine) {
+        engine.resize();
+        engine.render();
+      }
+    }, 300);
   }
 
   function applyLabel() {
@@ -3688,6 +3716,47 @@ window.openLineLabelModal = function(shape, onSave) {
     modal._handlersBound = true;
   }
 };
+
+// Global iOS Keyboard scroll drift reset: prevents bottom notch / dock from being raised
+document.addEventListener('focusout', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) {
+    setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      if (typeof engine !== 'undefined' && engine) {
+        engine.resize();
+        engine.render();
+      }
+    }, 60);
+    setTimeout(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+    }, 250);
+  }
+});
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    if (document.body.classList.contains('touch-ui-active')) {
+      if (!document.querySelector('input:focus, textarea:focus')) {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        document.body.scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+      }
+    }
+  });
+  window.visualViewport.addEventListener('scroll', () => {
+    if (document.body.classList.contains('touch-ui-active')) {
+      if (!document.querySelector('input:focus, textarea:focus')) {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        document.body.scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+      }
+    }
+  });
+}
 
 // ============================================================================
 // 8. PB TRADES "ICT FOR DUMMIES" ACADEMY MODULES & EXAM
