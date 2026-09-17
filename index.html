@@ -12,10 +12,25 @@
   <meta name="theme-color" content="#0a0e17">
   <link rel="manifest" href="manifest.json?v=5.0">
   <title>PB Trades ICT Replay Backtester & Academy</title>
-  <link rel="stylesheet" href="styles.css?v=10.16">
+  <link rel="stylesheet" href="styles.css?v=10.17">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230a0e17%22/><text x=%2250%22 y=%2270%22 font-size=%2265%22 text-anchor=%22middle%22>⚡</text></svg>">
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <script>
+    (function() {
+      try {
+        var isStandalone = (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+        var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth <= 1024);
+        var savedMode = localStorage.getItem('pb_ui_mode');
+        if (savedMode === 'touch' || isStandalone || (savedMode !== 'desktop' && isTouch)) {
+          document.documentElement.classList.add('touch-ui-active');
+        }
+        if (isStandalone) {
+          document.documentElement.classList.add('standalone-mode');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
 
@@ -1146,11 +1161,11 @@
   <div class="toast-notification" id="toastBox">Notification</div>
 
   <!-- LOAD SCRIPTS IN ORDER -->
-  <script src="pb_academy_data.js?v=10.16"></script>
-  <script src="academy_data.js?v=10.16"></script>
-  <script src="replay_scenarios_data.js?v=10.16"></script>
-  <script src="engine.js?v=10.16"></script>
-  <script src="replay_engine.js?v=10.16"></script>
-  <script src="app.js?v=10.16"></script>
+  <script src="pb_academy_data.js?v=10.17"></script>
+  <script src="academy_data.js?v=10.17"></script>
+  <script src="replay_scenarios_data.js?v=10.17"></script>
+  <script src="engine.js?v=10.17"></script>
+  <script src="replay_engine.js?v=10.17"></script>
+  <script src="app.js?v=10.17"></script>
 </body>
 </html>

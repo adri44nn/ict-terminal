@@ -3074,9 +3074,10 @@ function setupTouchUIManager(engine) {
   function isTouchDevice() {
     const ua = navigator.userAgent || '';
     const isMobileDevice = /iPad|iPhone|iPod|Android/i.test(ua);
-    const isIPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1 && !window.MSStream && screen.width <= 1366 && screen.height <= 1366);
+    const isIPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const isStandalone = (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    return isMobileDevice || isIPadOS || isStandalone || (window.innerWidth <= 640 && ('ontouchstart' in window));
+    const isTouchScreen = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    return isMobileDevice || isIPadOS || isStandalone || (window.innerWidth <= 1024 && isTouchScreen);
   }
 
   // Mark DOM if running as standalone home screen PWA
@@ -3089,10 +3090,12 @@ function setupTouchUIManager(engine) {
   function setTouchMode(enable, notify = true) {
     closeAllTouchSheets();
     if (enable) {
+      document.documentElement.classList.add('touch-ui-active');
       document.body.classList.add('touch-ui-active');
       localStorage.setItem('pb_ui_mode', 'touch');
       if (notify) showToast('📱 Touch-First UI Activated');
     } else {
+      document.documentElement.classList.remove('touch-ui-active');
       document.body.classList.remove('touch-ui-active');
       localStorage.setItem('pb_ui_mode', 'desktop');
       if (notify) showToast('🖥️ Desktop Terminal Activated');
@@ -3122,7 +3125,11 @@ function setupTouchUIManager(engine) {
   if (savedMode === 'touch' || isStandaloneApp) {
     setTouchMode(true, false);
   } else if (savedMode === 'desktop') {
-    setTouchMode(false, false);
+    if (isTouchDevice() && window.innerWidth <= 768) {
+      setTouchMode(true, false);
+    } else {
+      setTouchMode(false, false);
+    }
   } else {
     // Auto-detect touch devices
     if (isTouchDevice()) {
