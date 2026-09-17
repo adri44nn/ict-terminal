@@ -1216,28 +1216,29 @@
           return;
         }
 
-        // Two-finger horizontal swipe on Mac trackpad = smooth horizontal chart pan
-        if (Math.abs(normX) > Math.abs(normY) && Math.abs(normX) > 2) {
-          const barWidth = this.getBarWidth();
-          const panBars = Math.round(normX / (barWidth * 1.6));
-          if (panBars !== 0) {
+        // Two-finger horizontal swipe on Mac trackpad = smooth horizontal chart pan with sub-bar accumulator
+        if (Math.abs(normX) > Math.abs(normY) && Math.abs(normX) > 1.5) {
+          this._panAccumulator = (this._panAccumulator || 0) + normX * 0.045;
+          if (Math.abs(this._panAccumulator) >= 1) {
+            const panBars = Math.trunc(this._panAccumulator);
+            this._panAccumulator -= panBars;
             const allCandles = this.getVisibleCandles();
             const maxPan = Math.max(0, (allCandles ? allCandles.length : 0) - 1);
             this.panOffsetBars = Math.min(maxPan, Math.max(-25, this.panOffsetBars - panBars));
             this.requestRender();
-            return;
           }
+          return;
         }
 
-        // Scrolling over chart area = smooth calibrated zoom
-        const zoomStep = Math.max(1, Math.min(Math.round(this.visibleBarsCount * 0.035), Math.round(Math.abs(normY) * 0.045)));
-        if (normY < 0) {
-          this.visibleBarsCount = Math.max(12, this.visibleBarsCount - zoomStep);
-        } else {
-          this.visibleBarsCount = Math.min(650, this.visibleBarsCount + zoomStep);
+        // Scrolling over chart area = ultra-smooth calibrated zoom with sub-bar accumulator for Mac trackpad & mouse
+        this._zoomAccumulator = (this._zoomAccumulator || 0) + normY * 0.025;
+        if (Math.abs(this._zoomAccumulator) >= 1) {
+          const bars = Math.trunc(this._zoomAccumulator);
+          this._zoomAccumulator -= bars;
+          const clampedBars = Math.max(-8, Math.min(8, bars));
+          this.visibleBarsCount = Math.max(12, Math.min(650, this.visibleBarsCount + clampedBars));
+          this.requestRender();
         }
-
-        this.requestRender();
       }, { passive: false });
 
       // Double-click on chart: if clicking on a line or text handle -> edit label; otherwise reset zoom
@@ -2043,6 +2044,8 @@
           const endAnchorX = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
           const yStart = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
           const yEnd = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
+          const startAnchorY = yStart;
+          const endAnchorY = yEnd;
 
           const x1 = Math.min(startAnchorX, endAnchorX);
           const x2 = Math.max(startAnchorX, endAnchorX);
@@ -2840,25 +2843,29 @@
           return;
         }
 
-        // Two-finger horizontal swipe on Mac trackpad = smooth horizontal chart pan
-        if (Math.abs(normX) > Math.abs(normY) && Math.abs(normX) > 2) {
-          const barWidth = this.getBarWidth();
-          const panBars = Math.round(normX / (barWidth * 1.6));
-          if (panBars !== 0) {
+        // Two-finger horizontal swipe on Mac trackpad = smooth horizontal chart pan with sub-bar accumulator
+        if (Math.abs(normX) > Math.abs(normY) && Math.abs(normX) > 1.5) {
+          this._panAccumulator = (this._panAccumulator || 0) + normX * 0.045;
+          if (Math.abs(this._panAccumulator) >= 1) {
+            const panBars = Math.trunc(this._panAccumulator);
+            this._panAccumulator -= panBars;
             const allCandles = this.getVisibleCandles();
             const maxPan = Math.max(0, (allCandles ? allCandles.length : 0) - 1);
             this.panOffsetBars = Math.min(maxPan, Math.max(-25, this.panOffsetBars - panBars));
             this.requestRender();
-            return;
           }
+          return;
         }
 
-        // Scrolling over chart: horizontal bar count zoom on BOTH charts in lockstep
-        const zoomStep = Math.max(1, Math.min(Math.round(this.visibleBarsCount * 0.035), Math.round(Math.abs(normY) * 0.045)));
-        if (normY < 0) this.visibleBarsCount = Math.max(12, this.visibleBarsCount - zoomStep);
-        else this.visibleBarsCount = Math.min(650, this.visibleBarsCount + zoomStep);
-
-        this.requestRender();
+        // Scrolling over chart: ultra-smooth calibrated zoom on BOTH charts in lockstep
+        this._zoomAccumulator = (this._zoomAccumulator || 0) + normY * 0.025;
+        if (Math.abs(this._zoomAccumulator) >= 1) {
+          const bars = Math.trunc(this._zoomAccumulator);
+          this._zoomAccumulator -= bars;
+          const clampedBars = Math.max(-8, Math.min(8, bars));
+          this.visibleBarsCount = Math.max(12, Math.min(650, this.visibleBarsCount + clampedBars));
+          this.requestRender();
+        }
       }, { passive: false });
 
       // Double-click resets secondary zoom & price scale

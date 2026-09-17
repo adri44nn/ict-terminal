@@ -189,6 +189,17 @@ function setupNavigation() {
       if (targetView) targetView.classList.add('active');
       STATE.activeTab = tabId;
 
+      if (tabId !== 'replayTab' && document.body.classList.contains('replay-fullscreen-mode')) {
+        document.body.classList.remove('replay-fullscreen-mode');
+        const fsToggleBtn = document.getElementById('replayFullscreenToggleBtn');
+        if (fsToggleBtn) {
+          fsToggleBtn.textContent = '⛶ Fullscreen';
+          fsToggleBtn.classList.remove('active');
+        }
+        const toolFsBtn = document.getElementById('toolFullscreenBtn');
+        if (toolFsBtn) toolFsBtn.classList.remove('active');
+      }
+
       if (tabId === 'replayTab' && window.replayEngine) {
         setTimeout(() => {
           window.replayEngine.resize();
