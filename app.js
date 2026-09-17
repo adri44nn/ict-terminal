@@ -3628,9 +3628,31 @@ window.openLineLabelModal = function(shape, onSave) {
   }, 50);
 
   function closeLineModal() {
+    if (input) input.blur();
     modal.style.display = 'none';
     activeLineShapeForLabel = null;
     activeLineLabelSaveCallback = null;
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+    setTimeout(() => {
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      if (window.replayEngine && typeof window.replayEngine.resize === 'function') {
+        window.replayEngine.resize();
+        window.replayEngine.render();
+      }
+    }, 150);
+    setTimeout(() => {
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      if (window.replayEngine && typeof window.replayEngine.resize === 'function') {
+        window.replayEngine.resize();
+        window.replayEngine.render();
+      }
+    }, 350);
   }
 
   function applyLabel() {
