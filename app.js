@@ -2984,7 +2984,10 @@ function setupTouchUIManager(engine) {
 
   // --- MODE SWITCHING & DEVICE DETECTION ---
   function isTouchDevice() {
-    return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth <= 1024);
+    const ua = navigator.userAgent || '';
+    const isMobileDevice = /iPad|iPhone|iPod|Android/i.test(ua);
+    const isIPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1 && !window.MSStream && screen.width <= 1366 && screen.height <= 1366);
+    return isMobileDevice || isIPadOS || (window.innerWidth <= 640 && ('ontouchstart' in window));
   }
 
   function setTouchMode(enable, notify = true) {

@@ -152,11 +152,20 @@
 
     init(canvasElement, scenarioId) {
       this.canvas = canvasElement;
+      this.ctx = this.canvas.getContext('2d');
       const defaultId = (window.REPLAY_SCENARIOS && window.REPLAY_SCENARIOS.list && window.REPLAY_SCENARIOS.list[0]) ? window.REPLAY_SCENARIOS.list[0].id : 'situation-01';
       this.loadScenario(scenarioId || defaultId);
       this.bindEvents();
       this.resize();
       this.render();
+    }
+
+    clearDrawings() {
+      this.setTool('clear');
+    }
+
+    seekToPercent(pct) {
+      this.seekFraction(Math.max(0, Math.min(100, pct)) / 100.0);
     }
 
     initSecondary(secondaryCanvasElement) {
@@ -705,6 +714,9 @@
     // ========================================================================
     resize() {
       if (!this.canvas) return;
+      if (!this.ctx) {
+        this.ctx = this.canvas.getContext('2d');
+      }
       const rect = this.canvas.getBoundingClientRect();
       this.width = rect.width;
       this.height = rect.height;
@@ -712,7 +724,9 @@
 
       this.canvas.width = this.width * this.pixelRatio;
       this.canvas.height = this.height * this.pixelRatio;
-      this.ctx.scale(this.pixelRatio, this.pixelRatio);
+      if (this.ctx) {
+        this.ctx.scale(this.pixelRatio, this.pixelRatio);
+      }
     }
 
     zoomIn() {
