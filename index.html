@@ -12,7 +12,7 @@
   <meta name="theme-color" content="#0a0e17">
   <link rel="manifest" href="manifest.json?v=5.0">
   <title>PB Trades ICT Replay Backtester & Academy</title>
-  <link rel="stylesheet" href="styles.css?v=10.3">
+  <link rel="stylesheet" href="styles.css?v=10.4">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230a0e17%22/><text x=%2250%22 y=%2270%22 font-size=%2265%22 text-anchor=%22middle%22>⚡</text></svg>">
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -118,12 +118,22 @@
       
       <!-- REPLAY CONTROLS & SCENARIO TOP STRIP -->
       <div class="replay-top-strip">
-        <div class="scenario-selector-box">
-          <label for="replayScenarioSelect" style="font-size: 11px; font-weight: 700; color: var(--accent-cyan);">📚 PRACTICE SCENARIO:</label>
-          <select id="replayScenarioSelect" class="scenario-dropdown">
-            <!-- Populated via JS from REPLAY_SCENARIOS -->
-          </select>
-          <button class="btn btn-secondary btn-sm" id="scenarioInfoBtn" title="View Scenario Goals & Study Guide">ℹ️ Playbook</button>
+        <div class="situation-selector-bar">
+          <span class="situation-bar-label">⚡ SITUATION:</span>
+          <div class="situation-nav-cluster">
+            <button class="sit-arrow-btn" id="prevSituationBtn" title="Previous Situation (◀)">◀</button>
+            <button class="sit-pill-trigger" id="situationPickerBtn" title="Open 25 Situations Drawer">
+              <span class="sit-indicator">●</span>
+              <span class="sit-label-text" id="currentSituationName">Situation 01</span>
+              <span class="sit-caret">▾</span>
+            </button>
+            <button class="sit-arrow-btn" id="nextSituationBtn" title="Next Situation (▶)">▶</button>
+          </div>
+          <button class="btn btn-sit-random" id="randomSituationBtn" title="Pick Random Practice Situation (Blind Replay)">
+            🎲 Random
+          </button>
+          <select id="replayScenarioSelect" style="display: none;"></select>
+          <button class="btn btn-secondary btn-sm" id="scenarioInfoBtn" title="View Situation Playbook">ℹ️ Playbook</button>
         </div>
 
         <!-- SPLIT-SCREEN / DUAL CHART SMT TOGGLES -->
@@ -213,6 +223,16 @@
             <div class="timeline-scrubber-box">
               <input type="range" id="replayScrubber" min="0" max="100" value="20" class="timeline-slider">
               <div class="replay-time-readout" id="replayTimeReadout">09:30:00 NY</div>
+            </div>
+
+            <!-- Focused Fullscreen Situation Quick Switcher -->
+            <div class="fs-situation-cluster" id="fsSituationCluster">
+              <button class="fs-sit-arrow-btn" id="fsPrevSituationBtn" title="Previous Situation">◀</button>
+              <button class="fs-sit-trigger-btn" id="fsSituationPickerBtn" title="Select Situation">
+                <span id="fsSituationName">⚡ Sit 01</span> ▾
+              </button>
+              <button class="fs-sit-arrow-btn" id="fsNextSituationBtn" title="Next Situation">▶</button>
+              <button class="fs-sit-rand-btn" id="fsRandomSituationBtn" title="Random Situation">🎲</button>
             </div>
 
             <!-- Fullscreen Header Actions (Layout Pills + Trade HUD Toggle + Exit Fullscreen) -->
@@ -425,6 +445,43 @@
           </div>
           <div class="modal-body" id="scenarioModalBody">
             <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- SITUATION SELECTOR MODAL DRAWER -->
+      <div class="situation-modal" id="situationSelectModal" style="display: none;">
+        <div class="situation-modal-backdrop" id="situationModalBackdrop"></div>
+        <div class="situation-modal-dialog">
+          <div class="situation-modal-header">
+            <div class="situation-modal-header-left">
+              <div class="situation-modal-badge">⚡ SITUATION SELECTOR</div>
+              <h3 class="situation-modal-title">Select Practice Situation</h3>
+              <p class="situation-modal-subtitle">25 Authentic Blind Market Datasets • 1-Minute Replay • NQ & ES</p>
+            </div>
+            <div class="situation-modal-header-right">
+              <button class="btn btn-sit-random" id="modalRandomSituationBtn">🎲 Pick Random Situation</button>
+              <button class="modal-close-btn" id="situationModalCloseBtn">✕</button>
+            </div>
+          </div>
+          
+          <div class="situation-modal-toolbar">
+            <div class="situation-search-wrapper">
+              <span class="situation-search-icon">🔍</span>
+              <input type="text" id="situationSearchInput" placeholder="Search situation (e.g. 05, 14, 25)..." class="situation-search-field">
+            </div>
+            <div class="situation-filter-chips" id="situationFilterChips">
+              <button class="sit-filter-chip active" data-filter="all">All (25)</button>
+              <button class="sit-filter-chip" data-filter="unplayed">⚪ Unplayed</button>
+              <button class="sit-filter-chip" data-filter="won">🎯 Won</button>
+              <button class="sit-filter-chip" data-filter="lost">🛑 Lost</button>
+            </div>
+          </div>
+
+          <div class="situation-modal-body">
+            <div class="situation-cards-grid" id="situationCardsGrid">
+              <!-- Dynamically populated 25 cards via JS -->
+            </div>
           </div>
         </div>
       </div>
@@ -817,11 +874,11 @@
   <div class="toast-notification" id="toastBox">Notification</div>
 
   <!-- LOAD SCRIPTS IN ORDER -->
-  <script src="pb_academy_data.js?v=10.3"></script>
-  <script src="academy_data.js?v=10.3"></script>
-  <script src="replay_scenarios_data.js?v=10.3"></script>
-  <script src="engine.js?v=10.3"></script>
-  <script src="replay_engine.js?v=10.3"></script>
-  <script src="app.js?v=10.3"></script>
+  <script src="pb_academy_data.js?v=10.4"></script>
+  <script src="academy_data.js?v=10.4"></script>
+  <script src="replay_scenarios_data.js?v=10.4"></script>
+  <script src="engine.js?v=10.4"></script>
+  <script src="replay_engine.js?v=10.4"></script>
+  <script src="app.js?v=10.4"></script>
 </body>
 </html>

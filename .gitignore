@@ -1,5 +1,8 @@
 .vercel
+.netlify/
 bin/
+download/
 __pycache__/
 *.pyc
 .DS_Store
+

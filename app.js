@@ -2032,7 +2032,7 @@ function initReplayBacktester() {
   const scenarioSelect = document.getElementById('replayScenarioSelect');
   function updateScenarioDropdown() {
     if (scenarioSelect && window.REPLAY_SCENARIOS) {
-      scenarioSelect.innerHTML = window.REPLAY_SCENARIOS.list.map(s => `
+      scenarioSelect.innerHTML = window.REPLAY_SCENARIOS.getAll().map(s => `
         <option value="${s.id}">${s.name} (${s.symbol})</option>
       `).join('');
     }
@@ -2042,65 +2042,16 @@ function initReplayBacktester() {
   if (scenarioSelect) {
     scenarioSelect.addEventListener('change', (e) => {
       engine.loadScenario(e.target.value);
-      showToast(`Loaded Scenario: ${engine.scenario.name}`);
+      showToast(`Loaded ${engine.scenario.name}`);
     });
   }
 
-  // Fetch actual live exchange candles for MNQ, MES, and MGC
-  async function loadLiveExchangeScenarios() {
-    try {
-      const symbols = ['MNQ', 'MES', 'MGC'];
-      for (const sym of symbols) {
-        const res = await fetch(`/api/replay/live-data?symbol=${sym}&days=5`);
-        const data = await res.json();
-        if (data && data.candles_1m && data.candles_1m.length > 60) {
-          const liveId = `live-${sym.toLowerCase()}-recent`;
-          const exists = window.REPLAY_SCENARIOS.list.find(s => s.id === liveId);
-          const liveScenario = {
-            id: liveId,
-            name: `🔴 Real Live Market: ${sym} Recent Multi-Day Session (${data.candles_1m.length} 1m Bars)`,
-            symbol: sym,
-            dateStr: "Recent Live Exchange Trading Days",
-            category: "Actual Live Market Feed",
-            difficulty: "Real Live Order Flow",
-            description: `100% genuine tick-for-tick exchange candles directly from the live futures market (${sym}). Backtest recent price action bar-by-bar across 1m, 5m, 15m, 30m, 1h, 4h, and Daily timeframes.`,
-            learningGoals: [
-              "Read authentic institutional order flow without any synthetic smoothing",
-              "Identify real-time Fair Value Gaps and Liquidity Raids on live futures data",
-              "Execute PB Trades execution model under realistic live market conditions"
-            ],
-            startPrice: data.candles_1m[0].open,
-            startTime: data.candles_1m[0].time,
-            durationMinutes: data.candles_1m.length,
-            volatility: sym === 'MNQ' ? 6.5 : (sym === 'MES' ? 2.5 : 1.5),
-            patternType: "live_exchange",
-            raw1m: data.candles_1m,
-            suggestedPlaybook: {
-              bias: "Dynamic Live Delivery",
-              entryWindow: "Killzone Windows (02:00-05:00 / 10:00-11:00 NY)",
-              expectedSetup: "PB Trades 5-Point Setup Confirmation",
-              invalidation: "Beyond structural swing high/low",
-              target: "Opposing BSL/SSL pool"
-            }
-          };
-
-          if (exists) {
-            Object.assign(exists, liveScenario);
-          } else {
-            window.REPLAY_SCENARIOS.list.push(liveScenario);
-          }
-        }
-      }
-      updateScenarioDropdown();
-    } catch (e) {
-      console.log("Live exchange scenario fetch:", e);
-    }
-  }
-  loadLiveExchangeScenarios();
-
   // 2. Initialize Primary and Secondary Canvas
-  const firstRealScenarioId = window.REPLAY_SCENARIOS && window.REPLAY_SCENARIOS.list.length > 0 ? window.REPLAY_SCENARIOS.list[0].id : null;
+  const firstRealScenarioId = window.REPLAY_SCENARIOS && window.REPLAY_SCENARIOS.getAll().length > 0 ? window.REPLAY_SCENARIOS.getAll()[0].id : null;
   engine.init(canvasEl, scenarioSelect && scenarioSelect.value ? scenarioSelect.value : firstRealScenarioId);
+
+  // Initialize Situation Selector & 25-Card Modal Drawer
+  setupSituationSelector(engine);
 
   const secCanvas = document.getElementById('replaySecondaryCanvas');
   if (secCanvas) {
@@ -2678,6 +2629,246 @@ window.updatePbChecklistScore = function() {
   }
 };
 
+// ============================================================================
+// 6b. SITUATION SELECTOR MODAL DRAWER & QUICK CONTROLS (25 BLIND SITUATIONS)
+// ============================================================================
+function setupSituationSelector(engine) {
+  const currentNameEl = document.getElementById('currentSituationName');
+  const fsNameEl = document.getElementById('fsSituationName');
+  const modal = document.getElementById('situationSelectModal');
+  const backdrop = document.getElementById('situationModalBackdrop');
+  const closeBtn = document.getElementById('situationModalCloseBtn');
+  const cardsGrid = document.getElementById('situationCardsGrid');
+  const searchInput = document.getElementById('situationSearchInput');
+  const filterChips = document.querySelectorAll('#situationFilterChips .sit-filter-chip');
+
+  const prevBtns = [document.getElementById('prevSituationBtn'), document.getElementById('fsPrevSituationBtn')];
+  const nextBtns = [document.getElementById('nextSituationBtn'), document.getElementById('fsNextSituationBtn')];
+  const pickerBtns = [document.getElementById('situationPickerBtn'), document.getElementById('fsSituationPickerBtn')];
+  const randomBtns = [
+    document.getElementById('randomSituationBtn'),
+    document.getElementById('fsRandomSituationBtn'),
+    document.getElementById('modalRandomSituationBtn')
+  ];
+
+  let currentFilter = 'all';
+  let currentSearch = '';
+
+  function getSituations() {
+    return (window.REPLAY_SCENARIOS && window.REPLAY_SCENARIOS.getAll()) || [];
+  }
+
+  function getSituationTrades(sitId) {
+    if (!window.ReplayJournalStore) return [];
+    return window.ReplayJournalStore.getTrades().filter(t => t.scenarioId === sitId);
+  }
+
+  function updateSituationLabels(scenario) {
+    if (!scenario) return;
+    const sitName = scenario.name || 'Situation 01';
+    if (currentNameEl) currentNameEl.textContent = sitName;
+    if (fsNameEl) fsNameEl.textContent = `⚡ ${sitName.replace('Situation ', 'Sit ')}`;
+
+    // Sync fallback select dropdown
+    const select = document.getElementById('replayScenarioSelect');
+    if (select && select.value !== scenario.id) {
+      select.value = scenario.id;
+    }
+  }
+
+  function renderSituationCards() {
+    if (!cardsGrid) return;
+    const situations = getSituations();
+    const activeId = engine.scenario ? engine.scenario.id : (situations[0] ? situations[0].id : '');
+
+    const filtered = situations.filter(s => {
+      const trades = getSituationTrades(s.id);
+      const isWon = trades.some(t => t.outcome === 'WIN');
+      const isLost = trades.some(t => t.outcome === 'LOSS') && !isWon;
+      const isUnplayed = trades.length === 0;
+
+      if (currentFilter === 'unplayed' && !isUnplayed) return false;
+      if (currentFilter === 'won' && !isWon) return false;
+      if (currentFilter === 'lost' && !isLost) return false;
+
+      if (currentSearch) {
+        const query = currentSearch.toLowerCase().trim();
+        const sitNum = s.situationNumber ? s.situationNumber.toString() : '';
+        const nameMatch = s.name.toLowerCase().includes(query);
+        const numMatch = sitNum.includes(query) || (`0${sitNum}`).includes(query);
+        if (!nameMatch && !numMatch) return false;
+      }
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      cardsGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 48px 16px; color: var(--text-muted);">
+          <div style="font-size: 32px; margin-bottom: 8px;">🔍</div>
+          <div style="font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 4px;">No situations match your search</div>
+          <div style="font-size: 11px;">Try searching by number (e.g. 05, 14, 25) or selecting 'All (25)'.</div>
+        </div>
+      `;
+      return;
+    }
+
+    cardsGrid.innerHTML = filtered.map(s => {
+      const isActive = s.id === activeId;
+      const trades = getSituationTrades(s.id);
+      const isWon = trades.some(t => t.outcome === 'WIN');
+      const isLost = trades.some(t => t.outcome === 'LOSS') && !isWon;
+
+      let statusBadge = `<span class="sit-card-status">⚪ Ready</span>`;
+      if (isWon) {
+        const bestTrade = trades.filter(t => t.outcome === 'WIN')[0];
+        const gain = (bestTrade && bestTrade.pnl) ? bestTrade.pnl.toFixed(0) : '0';
+        statusBadge = `<span class="sit-card-status status-won">🎯 Won (+$${gain})</span>`;
+      } else if (isLost) {
+        const lossTrade = trades.filter(t => t.outcome === 'LOSS')[0];
+        const loss = (lossTrade && lossTrade.pnl) ? Math.abs(lossTrade.pnl).toFixed(0) : '0';
+        statusBadge = `<span class="sit-card-status status-lost">🛑 Lost (-$${loss})</span>`;
+      }
+
+      return `
+        <div class="situation-card ${isActive ? 'active-situation' : ''}" data-id="${s.id}">
+          <div class="sit-card-top">
+            <span class="sit-card-title">⚡ ${s.name}</span>
+            ${statusBadge}
+          </div>
+          <div class="sit-card-meta">
+            <div class="sit-meta-row">
+              <span>Primary:</span>
+              <span class="sit-meta-val">MNQ (NQ Futures)</span>
+            </div>
+            <div class="sit-meta-row">
+              <span>SMT Pair:</span>
+              <span class="sit-meta-val">MES (S&P 500)</span>
+            </div>
+            <div class="sit-meta-row">
+              <span>Structure:</span>
+              <span class="sit-meta-val">2-Day Contiguous</span>
+            </div>
+          </div>
+          <button class="sit-card-btn" data-id="${s.id}">
+            ${isActive ? '✓ Active Session' : '▶ Start Practice'}
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    // Bind card clicks
+    cardsGrid.querySelectorAll('.situation-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const sitId = card.getAttribute('data-id');
+        loadSituationById(sitId);
+        closeModal();
+      });
+    });
+  }
+
+  function loadSituationById(sitId) {
+    const situations = getSituations();
+    const sit = situations.find(s => s.id === sitId);
+    if (!sit) return;
+
+    engine.loadScenario(sit.id);
+    updateSituationLabels(sit);
+    renderSituationCards();
+    showToast(`⚡ Loaded ${sit.name} • 09:15 AM NY Open Structure`);
+  }
+
+  function openModal() {
+    if (modal) {
+      modal.style.display = 'flex';
+      renderSituationCards();
+      if (searchInput) {
+        searchInput.value = '';
+        currentSearch = '';
+        searchInput.focus();
+      }
+    }
+  }
+
+  function closeModal() {
+    if (modal) modal.style.display = 'none';
+  }
+
+  // Navigation: Prev and Next
+  function stepSituation(direction) {
+    const situations = getSituations();
+    if (situations.length === 0) return;
+    const currentId = engine.scenario ? engine.scenario.id : situations[0].id;
+    const currentIndex = situations.findIndex(s => s.id === currentId);
+    let nextIndex = currentIndex + direction;
+    if (nextIndex < 0) nextIndex = situations.length - 1;
+    if (nextIndex >= situations.length) nextIndex = 0;
+
+    loadSituationById(situations[nextIndex].id);
+  }
+
+  // Random Situation
+  function pickRandomSituation() {
+    const situations = getSituations();
+    if (situations.length === 0) return;
+
+    // Prioritize unplayed situations
+    const unplayed = situations.filter(s => getSituationTrades(s.id).length === 0);
+    const pool = unplayed.length > 0 ? unplayed : situations;
+    const randomSit = pool[Math.floor(Math.random() * pool.length)];
+
+    loadSituationById(randomSit.id);
+    closeModal();
+    showToast(`🎲 Random Practice: Loaded ${randomSit.name}`);
+  }
+
+  // Bind Open/Close Buttons
+  pickerBtns.forEach(btn => { if (btn) btn.addEventListener('click', openModal); });
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (backdrop) backdrop.addEventListener('click', closeModal);
+
+  // Bind Navigation Buttons
+  prevBtns.forEach(btn => { if (btn) btn.addEventListener('click', () => stepSituation(-1)); });
+  nextBtns.forEach(btn => { if (btn) btn.addEventListener('click', () => stepSituation(1)); });
+  randomBtns.forEach(btn => { if (btn) btn.addEventListener('click', pickRandomSituation); });
+
+  // Escape key closes modal
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal && modal.style.display === 'flex') {
+      closeModal();
+    }
+  });
+
+  // Filter chips in modal
+  filterChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      filterChips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentFilter = chip.getAttribute('data-filter') || 'all';
+      renderSituationCards();
+    });
+  });
+
+  // Search input
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      currentSearch = e.target.value;
+      renderSituationCards();
+    });
+  }
+
+  // Initial Label Setup
+  if (engine.scenario) {
+    updateSituationLabels(engine.scenario);
+  }
+
+  // Sync labels whenever engine changes state
+  const origOnState = engine.onStateChange;
+  engine.onStateChange = (state) => {
+    if (origOnState) origOnState(state);
+    if (engine.scenario) updateSituationLabels(engine.scenario);
+  };
+}
+
 function setupScenarioModal(engine) {
   const infoBtn = document.getElementById('scenarioInfoBtn');
   const modal = document.getElementById('scenarioModal');
@@ -2690,29 +2881,35 @@ function setupScenarioModal(engine) {
     const sc = engine.scenario;
     if (!sc) return;
 
-    titleEl.textContent = `📚 ${sc.name}`;
+    const pb = sc.playbook || sc.suggestedPlaybook || {};
+
+    titleEl.textContent = `📚 ${sc.name} Playbook`;
     bodyEl.innerHTML = `
       <div style="margin-bottom: 14px;">
-        <span class="step-tag">${sc.category}</span>
-        <span style="font-size: 11px; color: var(--text-muted); margin-left: 8px;">Difficulty: <strong>${sc.difficulty}</strong></span>
-        <div style="font-size: 12px; color: #60a5fa; margin-top: 4px;">📅 ${sc.dateStr}</div>
+        <span class="step-tag">${sc.category || 'Blind Market Replay'}</span>
+        <span style="font-size: 11px; color: var(--text-muted); margin-left: 8px;">Difficulty: <strong>${sc.difficulty || 'Standard'}</strong></span>
+        <div style="font-size: 12px; color: #60a5fa; margin-top: 4px;">📅 ${sc.symbol || 'MNQ'} • 2-Day Contiguous Dataset</div>
       </div>
 
-      <p style="font-size: 13px; line-height: 1.5; color: #e5e7eb; margin-bottom: 16px;">${sc.description}</p>
+      <p style="font-size: 13px; line-height: 1.5; color: #e5e7eb; margin-bottom: 16px;">${sc.description || 'Authentic historical market dataset. Pan left to inspect the entire previous trading day high and low.'}</p>
 
       <div class="sidebar-card" style="margin-bottom: 16px;">
         <h4 style="font-size: 12px; color: var(--accent-cyan); margin-bottom: 8px;">🎯 Suggested PB Trades Playbook:</h4>
         <div style="font-size: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-          <div>Bias: <strong>${sc.suggestedPlaybook.bias}</strong></div>
-          <div>Window: <strong>${sc.suggestedPlaybook.entryWindow}</strong></div>
-          <div>Setup: <strong>${sc.suggestedPlaybook.expectedSetup}</strong></div>
-          <div>Target: <strong>${sc.suggestedPlaybook.target}</strong></div>
+          <div>Bias: <strong>${pb.bias || 'Dynamic Read'}</strong></div>
+          <div>Window: <strong>${pb.entryWindow || '09:30 - 11:00 AM NY'}</strong></div>
+          <div>Setup: <strong>${pb.expectedSetup || 'FVG Retest / Liquidity Sweep'}</strong></div>
+          <div>Target: <strong>${pb.target || 'Opposing Liquidity Pool'}</strong></div>
         </div>
       </div>
 
       <h4 style="font-size: 12px; color: #fff; margin-bottom: 8px;">📝 Key Practice Objectives:</h4>
       <ul style="font-size: 12px; color: var(--text-muted); padding-left: 18px; line-height: 1.6;">
-        ${sc.learningGoals.map(g => `<li>${g}</li>`).join('')}
+        ${(sc.learningGoals || [
+          "Pan back to mark Previous Day High (PDH) and Previous Day Low (PDL)",
+          "Identify Asia & London liquidity sweeps before the 09:30 AM NY Open",
+          "Execute ICT Silver Bullet, Fair Value Gap (FVG), or Equilibrium setups without hindsight bias"
+        ]).map(g => `<li>${g}</li>`).join('')}
       </ul>
     `;
     modal.style.display = 'flex';
@@ -3667,7 +3864,7 @@ const MARKUP_CHALLENGES = [
   {
     id: 'markup-1',
     name: '🎯 NY Silver Bullet FVG Identification (MNQ)',
-    scenarioId: 'real-session-2026-09-11',
+    scenarioId: 'situation-01',
     symbol: 'MNQ',
     sliceStart: 600,
     sliceEnd: 720,

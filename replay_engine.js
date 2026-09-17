@@ -152,8 +152,8 @@
 
     init(canvasElement, scenarioId) {
       this.canvas = canvasElement;
-      this.ctx = this.canvas.getContext('2d');
-      this.loadScenario(scenarioId || 'real-session-2026-09-11');
+      const defaultId = (window.REPLAY_SCENARIOS && window.REPLAY_SCENARIOS.list && window.REPLAY_SCENARIOS.list[0]) ? window.REPLAY_SCENARIOS.list[0].id : 'situation-01';
+      this.loadScenario(scenarioId || defaultId);
       this.bindEvents();
       this.resize();
       this.render();
