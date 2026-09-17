@@ -3398,6 +3398,7 @@ body.touch-ui-active .replay-workspace {
   overflow: hidden !important;
 }
 
+body.touch-ui-active .replay-chart-area,
 body.touch-ui-active .chart-canvas-column {
   flex: 1 !important;
   height: 100% !important;
@@ -3444,14 +3445,16 @@ body.touch-ui-active .touch-top-bar {
   padding-top: env(safe-area-inset-top, 0px);
   padding-left: 14px;
   padding-right: 14px;
-  background: rgba(10, 14, 23, 0.85) !important;
-  backdrop-filter: blur(24px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  background: rgba(10, 14, 23, 0.94) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
   flex-shrink: 0;
   z-index: 50;
   gap: 8px;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .touch-top-left,
@@ -3577,12 +3580,14 @@ body.touch-ui-active .touch-bottom-dock {
   justify-content: space-around;
   height: calc(60px + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: rgba(10, 14, 23, 0.9) !important;
-  backdrop-filter: blur(24px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  background: rgba(10, 14, 23, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
   border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
   flex-shrink: 0;
   z-index: 50;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .touch-dock-item {
@@ -3659,13 +3664,15 @@ body.touch-ui-active .touch-replay-bar {
   left: 12px;
   right: 12px;
   padding: 10px 14px;
-  background: rgba(13, 17, 28, 0.88) !important;
-  backdrop-filter: blur(24px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  background: rgba(13, 17, 28, 0.94) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 20px !important;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
   z-index: 40;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
   transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.22s ease;
 }
 body.touch-ui-active .touch-replay-bar.minimized {
@@ -3819,9 +3826,9 @@ body.touch-ui-active .touch-replay-bar.minimized {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(13, 17, 27, 0.96) !important;
-  backdrop-filter: blur(30px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(30px) saturate(190%) !important;
+  background: rgba(13, 17, 27, 0.97) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
   border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 24px 24px 0 0 !important;
   box-shadow: 0 -12px 50px rgba(0, 0, 0, 0.75) !important;
@@ -3829,6 +3836,7 @@ body.touch-ui-active .touch-replay-bar.minimized {
   max-height: 85vh;
   display: flex !important;
   flex-direction: column;
+  will-change: transform;
   transform: translateY(105%);
   transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   padding-bottom: env(safe-area-inset-bottom, 14px);

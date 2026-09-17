@@ -14,26 +14,51 @@
     "MGC": { name: "Micro Gold Futures", yahoo: "MGC=F", alt: "GC=F", point_val: 10.00, tick: 0.10 }
   };
 
+  // Static DateTimeFormat instance & memoization cache for blazing 60-120fps performance
+  const _nyFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+  const _nyCache = new Map();
+
   // ==========================================================================
   // 1. PURE JAVASCRIPT ICT ENGINE
   // ==========================================================================
   const ICTEngine = {
     getNyTime: function(timestamp) {
-      const d = timestamp ? new Date(timestamp * 1000) : new Date();
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York',
-        hour12: false,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      }).formatToParts(d);
+      if (!timestamp) {
+        const d = new Date();
+        const parts = _nyFormatter.formatToParts(d);
+        const p = {};
+        for (let i = 0; i < parts.length; i++) p[parts[i].type] = parts[i].value;
+        return {
+          year: parseInt(p.year, 10),
+          month: parseInt(p.month, 10),
+          day: parseInt(p.day, 10),
+          hour: parseInt(p.hour, 10),
+          minute: parseInt(p.minute, 10),
+          second: parseInt(p.second, 10),
+          timeStr: `${p.hour}:${p.minute}:${p.second} NY`,
+          dateStr: `${p.year}-${p.month}-${p.day}`
+        };
+      }
 
-      let p = {};
-      parts.forEach(x => p[x.type] = x.value);
-      return {
+      const sec = Math.floor(timestamp);
+      const hit = _nyCache.get(sec);
+      if (hit) return hit;
+
+      const d = new Date(sec * 1000);
+      const parts = _nyFormatter.formatToParts(d);
+      const p = {};
+      for (let i = 0; i < parts.length; i++) p[parts[i].type] = parts[i].value;
+
+      const res = {
         year: parseInt(p.year, 10),
         month: parseInt(p.month, 10),
         day: parseInt(p.day, 10),
@@ -43,6 +68,10 @@
         timeStr: `${p.hour}:${p.minute}:${p.second} NY`,
         dateStr: `${p.year}-${p.month}-${p.day}`
       };
+
+      if (_nyCache.size > 8000) _nyCache.clear();
+      _nyCache.set(sec, res);
+      return res;
     },
 
     getKillzoneStatus: function(timestamp) {
