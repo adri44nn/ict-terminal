@@ -3347,21 +3347,9 @@ body.replay-fullscreen-mode #replaySecondaryCanvas {
 }
 
 /* ACTIVATED TOUCH-FIRST UI MODE (.touch-ui-active) */
-html:has(body.touch-ui-active),
-html.touch-ui-active {
-  overflow: hidden !important;
-  height: 100% !important;
-  height: 100dvh !important;
-  width: 100% !important;
-  position: fixed !important;
-  inset: 0 !important;
-}
-
 body.touch-ui-active {
-  position: fixed !important;
-  inset: 0 !important;
   overflow: hidden !important;
-  height: 100% !important;
+  height: 100vh !important;
   height: 100dvh !important;
   width: 100vw !important;
   margin: 0 !important;
@@ -3633,12 +3621,7 @@ body.touch-ui-active .touch-bottom-dock {
   display: flex !important;
   align-items: stretch;
   justify-content: space-around;
-  position: fixed !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-  height: calc(54px + env(safe-area-inset-bottom, 0px));
+  height: calc(60px + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
   background: rgba(10, 14, 23, 0.95) !important;
   backdrop-filter: blur(12px) !important;
@@ -3719,8 +3702,8 @@ body.touch-ui-active .touch-replay-bar {
   display: flex !important;
   flex-direction: column;
   gap: 10px;
-  position: fixed !important;
-  bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+  position: absolute;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
   left: 12px;
   right: 12px;
   padding: 10px 14px;
@@ -4523,10 +4506,9 @@ body.touch-ui-active .touch-replay-bar.minimized {
 
   /* Floating Replay Mini-Bar on iPhone 14 */
   body.touch-ui-active .touch-replay-bar {
-    position: fixed !important;
     left: 8px !important;
     right: 8px !important;
-    bottom: calc(52px + env(safe-area-inset-bottom, 0px) + 8px) !important;
+    bottom: calc(54px + env(safe-area-inset-bottom, 0px) + 8px) !important;
     padding: 8px 10px !important;
     border-radius: 16px !important;
     gap: 6px !important;
@@ -4565,11 +4547,6 @@ body.touch-ui-active .touch-replay-bar.minimized {
 
   /* Bottom Thumb Dock on iPhone 14 */
   body.touch-ui-active .touch-bottom-dock {
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
     height: calc(52px + env(safe-area-inset-bottom, 0px)) !important;
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   }
@@ -4858,29 +4835,5 @@ body.standalone-mode .touch-bottom-dock {
   }
   body.touch-ui-active .touch-sheet-body {
     padding: 10px 12px !important;
-  }
-}
-
-/* ========================================================================== */
-/* PREVENT IOS SAFARI INPUT AUTO-ZOOM & VIEWPORT SHIFT */
-/* ========================================================================== */
-#lineLabelInput,
-.touch-input,
-.form-control,
-body.touch-ui-active input[type="text"],
-body.touch-ui-active input[type="number"],
-body.touch-ui-active input[type="search"],
-body.touch-ui-active textarea,
-body.touch-ui-active select {
-  font-size: 16px !important; /* Must be >= 16px to prevent iOS Safari auto-zoom */
-}
-
-@media (max-width: 600px) {
-  #lineLabelModal {
-    align-items: flex-start !important;
-    padding-top: calc(40px + env(safe-area-inset-top, 0px)) !important;
-  }
-  #lineLabelModal .modal-dialog {
-    max-height: 80vh !important;
   }
 }
