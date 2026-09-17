@@ -1567,6 +1567,9 @@ canvas#ictChart { width: 100%; height: 100%; display: block; }
 .replay-charts-container.layout-single {
   grid-template-columns: 1fr;
 }
+.replay-charts-container.layout-single .primary-pane .chart-pane-header {
+  display: none !important;
+}
 
 .replay-charts-container.layout-dual {
   grid-template-columns: 1fr 1fr;
@@ -2706,10 +2709,13 @@ body.replay-fullscreen-mode {
 }
 
 body.replay-fullscreen-mode .top-bar,
+body.replay-fullscreen-mode .ticker-ribbon,
+body.replay-fullscreen-mode #tickerRibbon,
 body.replay-fullscreen-mode .market-ticker-ribbon,
 body.replay-fullscreen-mode .nav-tabs,
 body.replay-fullscreen-mode .replay-top-strip,
-body.replay-fullscreen-mode .replay-sidebar {
+body.replay-fullscreen-mode .replay-sidebar,
+body.replay-fullscreen-mode .primary-pane .chart-pane-header {
   display: none !important;
 }
 
@@ -3344,6 +3350,7 @@ body.replay-fullscreen-mode #replaySecondaryCanvas {
 body.touch-ui-active {
   overflow: hidden !important;
   height: 100vh !important;
+  height: 100dvh !important;
   width: 100vw !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -3354,13 +3361,16 @@ body.touch-ui-active {
 
 /* Hide desktop chrome in touch mode */
 body.touch-ui-active .top-bar,
+body.touch-ui-active .ticker-ribbon,
+body.touch-ui-active #tickerRibbon,
 body.touch-ui-active .market-ticker-ribbon,
 body.touch-ui-active .nav-tabs,
 body.touch-ui-active .replay-top-strip,
 body.touch-ui-active .replay-sidebar,
 body.touch-ui-active .tv-drawing-toolbar,
 body.touch-ui-active .replay-player-bar,
-body.touch-ui-active #replayExecHud {
+body.touch-ui-active #replayExecHud,
+body.touch-ui-active .primary-pane .chart-pane-header {
   display: none !important;
 }
 
@@ -4559,5 +4569,30 @@ body.touch-ui-active .touch-replay-bar.minimized {
   }
 }
 
+/* ========================================================================== */
+/* STANDALONE PWA (HOME SCREEN APP ON IPHONE / IPAD) */
+/* ========================================================================== */
+html.standalone-mode,
+body.standalone-mode {
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
 
+body.standalone-mode .top-bar,
+body.standalone-mode .ticker-ribbon,
+body.standalone-mode #tickerRibbon,
+body.standalone-mode .market-ticker-ribbon {
+  display: none !important;
+}
 
+body.standalone-mode .touch-top-bar {
+  padding-top: max(env(safe-area-inset-top, 0px), 20px) !important;
+  height: calc(46px + max(env(safe-area-inset-top, 0px), 20px)) !important;
+}
+
+body.standalone-mode .touch-bottom-dock {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 14px) !important;
+  height: calc(52px + max(env(safe-area-inset-bottom, 0px), 14px)) !important;
+}

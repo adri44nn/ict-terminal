@@ -753,7 +753,15 @@
     }
 
     setTool(toolName) {
+      if (!toolName) toolName = 'pointer';
       this.activeTool = toolName;
+      this.isDrawing = false;
+      this.isPanning = false;
+      this.isDraggingHandle = false;
+      this.activeDragHandle = null;
+      this.dragStartShapeSnapshot = null;
+      this.currentShape = null;
+      this.priceScaleDragging = false;
       if (toolName === 'clear') {
         this.undoStack.push([...this.drawings]);
         this.drawings = [];
@@ -1154,6 +1162,11 @@
             if (Math.abs(finishedShape.endTime - finishedShape.startTime) < barSec * 0.5) {
               finishedShape.endTime = finishedShape.startTime + barSec * 12;
             }
+          } else if (finishedShape.type === 'trendline' || finishedShape.type === 'liquidity') {
+            if (Math.abs(finishedShape.endX - finishedShape.startX) < 20) {
+              finishedShape.endX = finishedShape.startX + 140;
+              finishedShape.endTime = this.xToTime(finishedShape.endX);
+            }
           }
           this.undoStack.push([...this.drawings]);
           this.drawings.push(finishedShape);
@@ -1195,6 +1208,8 @@
       this.canvas.addEventListener('touchmove', onPointerMove, { passive: false });
       this.canvas.addEventListener('touchend', onPointerUp, { passive: false });
       this.canvas.addEventListener('touchcancel', onPointerLeave);
+      window.addEventListener('touchend', onPointerUp, { passive: true });
+      window.addEventListener('touchcancel', onPointerLeave, { passive: true });
 
       this.canvas.addEventListener('wheel', (e) => {
         e.preventDefault();

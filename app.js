@@ -2158,6 +2158,8 @@ function initReplayBacktester() {
   toolBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       const tool = btn.getAttribute('data-tool');
+      if (!tool) return; // Prevent non-tool buttons (like toolFullscreenBtn) from calling setTool(null)
+
       if (tool === 'toggle_automarkup') {
         const active = engine.toggleAutoMarkup();
         updateAutoMarkupUI(active);
@@ -2192,12 +2194,25 @@ function initReplayBacktester() {
         toolBtns.forEach(b => b.classList.remove('active'));
         const pointerBtn = document.querySelector('#tvDrawingToolbar [data-tool="pointer"]');
         if (pointerBtn) pointerBtn.classList.add('active');
+        const touchPointerTile = document.querySelector('#touchToolsGrid [data-tool="pointer"]');
+        if (touchPointerTile) {
+          document.querySelectorAll('#touchToolsGrid .touch-tool-tile').forEach(t => t.classList.remove('active'));
+          touchPointerTile.classList.add('active');
+        }
+        showToast("🗑️ Markups cleared");
         return;
       }
 
       toolBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       engine.setTool(tool);
+
+      // Sync active state with touch tool sheet
+      const touchTile = document.querySelector(`#touchToolsGrid [data-tool="${tool}"]`);
+      if (touchTile) {
+        document.querySelectorAll('#touchToolsGrid .touch-tool-tile').forEach(t => t.classList.remove('active'));
+        touchTile.classList.add('active');
+      }
     });
   });
 
@@ -2284,17 +2299,33 @@ function initReplayBacktester() {
 
   // 7. Fullscreen Focus Mode & Execution HUD
   function toggleReplayFullscreen() {
-    const isFs = document.body.classList.toggle('replay-fullscreen-mode');
-    const fsToggleBtn = document.getElementById('replayFullscreenToggleBtn');
-    const toolFsBtn = document.getElementById('toolFullscreenBtn');
+    const isCurrentlyFs = document.body.classList.contains('replay-fullscreen-mode') || !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const willBeFs = !isCurrentlyFs;
 
-    if (fsToggleBtn) {
-      fsToggleBtn.textContent = isFs ? '❌ Exit Focus' : '⛶ Fullscreen';
-      fsToggleBtn.classList.toggle('active', isFs);
+    // Invoke native browser Fullscreen API when available
+    try {
+      if (willBeFs) {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen().catch(() => {});
+        } else if (elem.webkitRequestFullscreen) {
+          elem.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          }
+        }
+      }
+    } catch (e) {
+      // Gracefully fall back to CSS focus mode on devices without Fullscreen API permission (e.g. iPhone)
     }
-    if (toolFsBtn) {
-      toolFsBtn.classList.toggle('active', isFs);
-    }
+
+    document.body.classList.toggle('replay-fullscreen-mode', willBeFs);
+    updateFullscreenUI(willBeFs);
 
     // Resize canvas to fill full screen immediately
     setTimeout(() => {
@@ -2302,8 +2333,35 @@ function initReplayBacktester() {
       engine.render();
     }, 60);
 
-    showToast(isFs ? "⛶ Fullscreen Focus Mode: Chart + Tools + TF + Replay Controls" : "Exited Fullscreen Focus Mode");
+    showToast(willBeFs ? "⛶ Fullscreen Focus Mode: Chart + Tools + TF + Replay Controls" : "Exited Fullscreen Focus Mode");
   }
+
+  function updateFullscreenUI(isFs) {
+    const fsToggleBtn = document.getElementById('replayFullscreenToggleBtn');
+    const toolFsBtn = document.getElementById('toolFullscreenBtn');
+    if (fsToggleBtn) {
+      fsToggleBtn.textContent = isFs ? '❌ Exit Focus' : '⛶ Fullscreen';
+      fsToggleBtn.classList.toggle('active', isFs);
+    }
+    if (toolFsBtn) {
+      toolFsBtn.classList.toggle('active', isFs);
+    }
+  }
+
+  // Keep button states in sync when user exits via Escape key or browser gesture
+  function handleNativeFsChange() {
+    const isNativeFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (!isNativeFs && document.body.classList.contains('replay-fullscreen-mode')) {
+      document.body.classList.remove('replay-fullscreen-mode');
+      updateFullscreenUI(false);
+      setTimeout(() => {
+        engine.resize();
+        engine.render();
+      }, 60);
+    }
+  }
+  document.addEventListener('fullscreenchange', handleNativeFsChange);
+  document.addEventListener('webkitfullscreenchange', handleNativeFsChange);
 
   const fsToggleBtn = document.getElementById('replayFullscreenToggleBtn');
   if (fsToggleBtn) fsToggleBtn.addEventListener('click', toggleReplayFullscreen);
@@ -2987,7 +3045,15 @@ function setupTouchUIManager(engine) {
     const ua = navigator.userAgent || '';
     const isMobileDevice = /iPad|iPhone|iPod|Android/i.test(ua);
     const isIPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1 && !window.MSStream && screen.width <= 1366 && screen.height <= 1366);
-    return isMobileDevice || isIPadOS || (window.innerWidth <= 640 && ('ontouchstart' in window));
+    const isStandalone = (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    return isMobileDevice || isIPadOS || isStandalone || (window.innerWidth <= 640 && ('ontouchstart' in window));
+  }
+
+  // Mark DOM if running as standalone home screen PWA
+  const isStandaloneApp = (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  if (isStandaloneApp) {
+    document.documentElement.classList.add('standalone-mode');
+    document.body.classList.add('standalone-mode');
   }
 
   function setTouchMode(enable, notify = true) {
@@ -3021,9 +3087,9 @@ function setupTouchUIManager(engine) {
     touchModeToggleBtn.addEventListener('click', () => setTouchMode(false));
   }
 
-  // Load Preference or Auto-Detect
+  // Load Preference or Auto-Detect (Standalone home screen apps always default to touch mode)
   const savedMode = localStorage.getItem('pb_ui_mode');
-  if (savedMode === 'touch') {
+  if (savedMode === 'touch' || isStandaloneApp) {
     setTouchMode(true, false);
   } else if (savedMode === 'desktop') {
     setTouchMode(false, false);
@@ -3266,6 +3332,14 @@ function setupTouchUIManager(engine) {
       touchToolTiles.forEach(t => t.classList.remove('active'));
       tile.classList.add('active');
       engine.setTool(tool);
+
+      // Sync active state on desktop toolbar
+      const desktopBtn = document.querySelector(`#tvDrawingToolbar [data-tool="${tool}"]`);
+      if (desktopBtn) {
+        document.querySelectorAll('#tvDrawingToolbar .tool-btn').forEach(b => b.classList.remove('active'));
+        desktopBtn.classList.add('active');
+      }
+
       closeAllTouchSheets();
       showToast(`✏️ ${tool.toUpperCase()} Tool Active • Tap & drag on chart`);
     });
@@ -3281,6 +3355,14 @@ function setupTouchUIManager(engine) {
   if (touchClearDrawingsBtn) {
     touchClearDrawingsBtn.addEventListener('click', () => {
       engine.clearDrawings();
+      touchToolTiles.forEach(t => t.classList.remove('active'));
+      const pointerTile = document.querySelector('#touchToolsGrid [data-tool="pointer"]');
+      if (pointerTile) pointerTile.classList.add('active');
+      const desktopPointerBtn = document.querySelector('#tvDrawingToolbar [data-tool="pointer"]');
+      if (desktopPointerBtn) {
+        document.querySelectorAll('#tvDrawingToolbar .tool-btn').forEach(b => b.classList.remove('active'));
+        desktopPointerBtn.classList.add('active');
+      }
       closeAllTouchSheets();
       showToast('🗑️ Cleared all markups');
     });
