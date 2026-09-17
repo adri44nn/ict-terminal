@@ -691,6 +691,7 @@
 
     notifyState() {
       if (this.onStateChange) {
+        const curTime = this.getCurrentTime();
         this.onStateChange({
           isPlaying: this.isPlaying,
           current1mIndex: this.current1mIndex,
@@ -698,7 +699,8 @@
           activeTf: this.activeTf,
           playSpeed: this.playSpeed,
           currentPrice: this.getCurrentPrice(),
-          currentTime: this.getCurrentTime(),
+          currentTime: curTime,
+          killzone: curTime ? window.ICTEngine.getKillzoneStatus(curTime) : null,
           activeTool: this.activeTool,
           autoMarkup: this.autoMarkup,
           sessions: this.overlays.sessions,
@@ -1808,8 +1810,11 @@
         const t = ny.hour + ny.minute / 60;
         if (t >= 20.0 || t < 0.0) return { key: 'asia', name: '🌏 ASIA', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.08)' };
         if (t >= 2.0 && t < 5.0) return { key: 'london', name: '🇬🇧 LONDON', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.08)' };
+        if (t >= 8.0 && t < 8.5) return { key: 'ny_prep', name: '🇺🇸 NY PRE-MKT', color: '#60a5fa', bg: 'rgba(96, 165, 250, 0.05)' };
         if (t >= 10.0 && t < 11.0) return { key: 'sb', name: '⚡ SILVER BULLET', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.15)' };
         if (t >= 8.5 && t < 11.0) return { key: 'ny_am', name: '🇺🇸 NY AM', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.06)' };
+        if (t >= 12.0 && t < 13.0) return { key: 'lunch', name: '⚠️ NY LUNCH', color: '#f97316', bg: 'rgba(249, 115, 22, 0.06)' };
+        if (t >= 13.5 && t < 16.0) return { key: 'ny_pm', name: '🇺🇸 NY PM', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.06)' };
         return null;
       };
 
@@ -2584,65 +2589,77 @@
       const changeColor = isUp ? "#10b981" : "#ef4444";
       const sym = this.scenario ? this.scenario.symbol : "MNQ";
       const tf = this.activeTf.toUpperCase();
+      const isMobile = chartWidth < 500;
 
-      // Top Legend Text Strip
-      ctx.font = "bold 12px monospace";
+      // Top Legend Text Strip - compact font and lower y-offset on mobile so it never collides
+      ctx.font = isMobile ? "bold 10px monospace" : "bold 12px monospace";
       ctx.textAlign = "left";
+      const y = isMobile ? 18 : 22;
 
-      let curX = 14;
+      let curX = isMobile ? 8 : 14;
       // Symbol & TF
       ctx.fillStyle = "#38bdf8";
-      ctx.fillText(`${sym} • ${tf}`, curX, 22);
-      curX += ctx.measureText(`${sym} • ${tf} `).width + 6;
+      ctx.fillText(`${sym} • ${tf}`, curX, y);
+      curX += ctx.measureText(`${sym} • ${tf} `).width + (isMobile ? 4 : 6);
 
-      // Exact Candle NY Time
-      const nyTime = window.ICTEngine.getNyTime(candle.time);
-      const timeStr = `${nyTime.hour.toString().padStart(2, '0')}:${nyTime.minute.toString().padStart(2, '0')}:${nyTime.second.toString().padStart(2, '0')} NY`;
+      // Exact Candle NY Time + Session Tag
+      const kz = window.ICTEngine.getKillzoneStatus(candle.time);
+      const timeStr = `${kz.ny_time_str.replace(' NY', '')} NY`;
       ctx.fillStyle = "#fbbf24";
-      ctx.fillText(`🕒 ${timeStr}`, curX, 22);
-      curX += ctx.measureText(`🕒 ${timeStr} `).width + 8;
+      const sessionLabel = isMobile ? `🕒 ${timeStr}` : `🕒 ${timeStr} [${kz.session_tag}]`;
+      ctx.fillText(sessionLabel, curX, y);
+      curX += ctx.measureText(`${sessionLabel} `).width + (isMobile ? 4 : 8);
 
-      // O
+      if (isMobile) {
+        // Compact Mobile: only show Close price and change so it fits comfortably on iPhone 14
+        ctx.fillStyle = changeColor;
+        const cStr = `C:${candle.close.toFixed(2)} (${isUp ? '+' : ''}${changePts})`;
+        ctx.fillText(cStr, curX, y);
+        ctx.restore();
+        return;
+      }
+
+      // Full Desktop View: O, H, L, C, Change, Volume
       ctx.fillStyle = "#94a3b8";
-      ctx.fillText("O:", curX, 22);
+      ctx.fillText("O:", curX, y);
       curX += 18;
       ctx.fillStyle = "#fff";
-      ctx.fillText(candle.open.toFixed(2), curX, 22);
+      ctx.fillText(candle.open.toFixed(2), curX, y);
       curX += ctx.measureText(candle.open.toFixed(2) + " ").width + 6;
 
       // H
       ctx.fillStyle = "#94a3b8";
-      ctx.fillText("H:", curX, 22);
+      ctx.fillText("H:", curX, y);
       curX += 18;
       ctx.fillStyle = "#fff";
-      ctx.fillText(candle.high.toFixed(2), curX, 22);
+      ctx.fillText(candle.high.toFixed(2), curX, y);
       curX += ctx.measureText(candle.high.toFixed(2) + " ").width + 6;
 
       // L
       ctx.fillStyle = "#94a3b8";
-      ctx.fillText("L:", curX, 22);
+      ctx.fillText("L:", curX, y);
       curX += 18;
       ctx.fillStyle = "#fff";
-      ctx.fillText(candle.low.toFixed(2), curX, 22);
+      ctx.fillText(candle.low.toFixed(2), curX, y);
       curX += ctx.measureText(candle.low.toFixed(2) + " ").width + 6;
 
       // C
       ctx.fillStyle = "#94a3b8";
-      ctx.fillText("C:", curX, 22);
+      ctx.fillText("C:", curX, y);
       curX += 18;
       ctx.fillStyle = changeColor;
-      ctx.fillText(candle.close.toFixed(2), curX, 22);
+      ctx.fillText(candle.close.toFixed(2), curX, y);
       curX += ctx.measureText(candle.close.toFixed(2) + " ").width + 6;
 
       // Change
       ctx.fillStyle = changeColor;
       const changeStr = `${isUp ? '+' : ''}${changePts} (${isUp ? '+' : ''}${changePct}%)`;
-      ctx.fillText(changeStr, curX, 22);
+      ctx.fillText(changeStr, curX, y);
       curX += ctx.measureText(changeStr + " ").width + 6;
 
       // Volume
       ctx.fillStyle = "#94a3b8";
-      ctx.fillText(`Vol: ${candle.volume || 0}`, curX, 22);
+      ctx.fillText(`Vol: ${candle.volume || 0}`, curX, y);
 
       ctx.restore();
     }

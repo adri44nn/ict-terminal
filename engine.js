@@ -81,47 +81,96 @@
       let isSb = false;
       let sbName = null;
       let activeKz = "Outside Killzones";
+      let sessionTag = "OUTSIDE KZ";
       let isHighProb = false;
       let isLunchTrap = false;
 
       if (timeDec >= 2.0 && timeDec < 5.0) {
         activeKz = "London Open Killzone (02:00 - 05:00 NY)";
+        sessionTag = "🇬🇧 LONDON";
         isHighProb = true;
         if (timeDec >= 3.0 && timeDec < 4.0) {
           isSb = true;
           sbName = "London Silver Bullet (03:00 - 04:00 NY)";
+          sessionTag = "⚡ LON SB";
         }
-      } else if (timeDec >= 8.5 && timeDec < 11.0) {
-        activeKz = "New York AM Killzone (08:30 - 11:00 NY)";
+      } else if (timeDec >= 5.0 && timeDec < 7.0) {
+        activeKz = "London Continuation Session (05:00 - 07:00 NY)";
+        sessionTag = "🇬🇧 LON CONT";
+      } else if (timeDec >= 7.0 && timeDec < 8.0) {
+        activeKz = "London Close Session (07:00 - 08:00 NY)";
+        sessionTag = "🇬🇧 LON CLOSE";
+      } else if (timeDec >= 8.0 && timeDec < 8.5) {
+        activeKz = "New York Pre-Market / NY Prep (08:00 - 08:30 NY)";
+        sessionTag = "🇺🇸 NY PRE-MKT";
+      } else if (timeDec >= 8.5 && timeDec < 9.5) {
+        activeKz = "New York AM Killzone (08:30 - 09:30 NY)";
+        sessionTag = "🇺🇸 NY OPEN";
         isHighProb = true;
-        if (timeDec >= 10.0 && timeDec < 11.0) {
-          isSb = true;
-          sbName = "New York AM Silver Bullet (10:00 - 11:00 NY)";
-        }
+      } else if (timeDec >= 9.5 && timeDec < 10.0) {
+        activeKz = "New York Equities Open (09:30 - 10:00 NY)";
+        sessionTag = "🇺🇸 NY CASH";
+        isHighProb = true;
+      } else if (timeDec >= 10.0 && timeDec < 11.0) {
+        activeKz = "New York AM Silver Bullet (10:00 - 11:00 NY)";
+        sessionTag = "⚡ SILVER BULLET";
+        isHighProb = true;
+        isSb = true;
+        sbName = "New York AM Silver Bullet (10:00 - 11:00 NY)";
+      } else if (timeDec >= 11.0 && timeDec < 12.0) {
+        activeKz = "London Fix / NY Morning Distribution (11:00 - 12:00 NY)";
+        sessionTag = "🇺🇸 NY AM DIST";
       } else if (timeDec >= 12.0 && timeDec < 13.0) {
         activeKz = "New York Lunch (12:00 - 13:00 NY) - Low Volume Trap";
+        sessionTag = "⚠️ NY LUNCH";
         isLunchTrap = true;
-      } else if (timeDec >= 13.5 && timeDec < 16.0) {
+      } else if (timeDec >= 13.0 && timeDec < 13.5) {
+        activeKz = "Post-Lunch Rebalancing (13:00 - 13:30 NY)";
+        sessionTag = "🇺🇸 POST-LUNCH";
+      } else if (timeDec >= 13.5 && timeDec < 14.0) {
         activeKz = "New York PM Killzone (13:30 - 16:00 NY)";
+        sessionTag = "🇺🇸 NY PM";
         isHighProb = true;
-        if (timeDec >= 14.0 && timeDec < 15.0) {
-          isSb = true;
-          sbName = "New York PM Silver Bullet (14:00 - 15:00 NY)";
-        }
+      } else if (timeDec >= 14.0 && timeDec < 15.0) {
+        activeKz = "New York PM Silver Bullet (14:00 - 15:00 NY)";
+        sessionTag = "⚡ PM SB";
+        isHighProb = true;
+        isSb = true;
+        sbName = "New York PM Silver Bullet (14:00 - 15:00 NY)";
+      } else if (timeDec >= 15.0 && timeDec < 16.0) {
+        activeKz = "New York Afternoon Macro / Equities Close (15:00 - 16:00 NY)";
+        sessionTag = "🇺🇸 NY CLOSE";
+      } else if (timeDec >= 16.0 && timeDec < 17.0) {
+        activeKz = "Equities Close & CME Settlement (16:00 - 17:00 NY)";
+        sessionTag = "🔒 CME SETTLE";
+      } else if (timeDec >= 17.0 && timeDec < 18.0) {
+        activeKz = "CME Maintenance Halt (17:00 - 18:00 NY)";
+        sessionTag = "🛑 CME HALT";
+      } else if (timeDec >= 18.0 && timeDec < 20.0) {
+        activeKz = "Globex Evening Re-Open (18:00 - 20:00 NY)";
+        sessionTag = "🌐 GLOBEX";
       } else if (timeDec >= 20.0 || timeDec < 0.0) {
         activeKz = "Asian Session (20:00 - 00:00 NY)";
+        sessionTag = "🌏 ASIA";
         isHighProb = true;
-      } else if (timeDec >= 5.0 && timeDec < 8.5) {
-        activeKz = "Pre-NY / London Lunch Session";
+      } else if (timeDec >= 0.0 && timeDec < 2.0) {
+        activeKz = "Midnight Open & Consolidation (00:00 - 02:00 NY)";
+        sessionTag = "🕛 MIDNIGHT";
       }
 
       const nextEvents = [
+        { time: 0.0, name: "Midnight Open (00:00 NY)" },
         { time: 2.0, name: "London Killzone (02:00 NY)" },
         { time: 3.0, name: "London Silver Bullet (03:00 NY)" },
+        { time: 8.0, name: "NY Pre-Market (08:00 NY)" },
         { time: 8.5, name: "NY AM Killzone (08:30 NY)" },
+        { time: 9.5, name: "NY Equities Open (09:30 NY)" },
         { time: 10.0, name: "NY AM Silver Bullet (10:00 NY)" },
+        { time: 12.0, name: "NY Lunch Trap (12:00 NY)" },
         { time: 13.5, name: "NY PM Killzone (13:30 NY)" },
         { time: 14.0, name: "NY PM Silver Bullet (14:00 NY)" },
+        { time: 16.0, name: "Equities Close (16:00 NY)" },
+        { time: 18.0, name: "Globex Re-Open (18:00 NY)" },
         { time: 20.0, name: "Asian Session (20:00 NY)" }
       ];
 
@@ -146,6 +195,7 @@
         ny_time_str: ny.timeStr,
         ny_date_str: ny.dateStr,
         active_killzone: activeKz,
+        session_tag: sessionTag,
         is_silver_bullet: isSb,
         silver_bullet_name: sbName,
         is_high_probability_time: isHighProb,

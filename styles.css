@@ -3369,8 +3369,10 @@ body.touch-ui-active .replay-top-strip,
 body.touch-ui-active .replay-sidebar,
 body.touch-ui-active .tv-drawing-toolbar,
 body.touch-ui-active .replay-player-bar,
-body.touch-ui-active #replayExecHud,
-body.touch-ui-active .primary-pane .chart-pane-header {
+body.touch-ui-active .primary-pane .chart-pane-header,
+body.touch-ui-active .secondary-pane .chart-pane-header,
+body.touch-ui-active .chart-pane-header,
+body.touch-ui-active #replayExecHud {
   display: none !important;
 }
 
@@ -3471,18 +3473,28 @@ body.touch-ui-active .touch-top-bar {
   -webkit-transform: translateZ(0);
 }
 
-.touch-top-left,
+.touch-top-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .touch-top-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .touch-top-center {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .touch-pill-btn {
@@ -4404,35 +4416,69 @@ body.touch-ui-active .touch-replay-bar.minimized {
 /* 1. IPHONE 14 & COMPACT PHONES (<= 480px width) */
 @media (max-width: 480px) {
   body.touch-ui-active .touch-top-bar {
-    height: calc(46px + env(safe-area-inset-top, 0px)) !important;
+    height: calc(44px + env(safe-area-inset-top, 0px)) !important;
     padding-top: env(safe-area-inset-top, 0px) !important;
-    padding-left: 8px !important;
-    padding-right: 8px !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
     gap: 4px !important;
+    overflow: hidden !important;
   }
-  .touch-top-left,
-  .touch-top-right {
-    gap: 4px !important;
-  }
-  .touch-top-center {
-    gap: 4px !important;
-  }
-  .touch-pill-btn {
-    padding: 4px 7px !important;
-    font-size: 11.5px !important;
+  .touch-top-left {
+    flex-shrink: 0 !important;
     gap: 3px !important;
   }
+  .touch-top-right {
+    flex-shrink: 0 !important;
+    gap: 3px !important;
+  }
+  .touch-top-center {
+    flex: 1 !important;
+    min-width: 0 !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    overflow: hidden !important;
+  }
+  .touch-pill-btn {
+    padding: 3px 6px !important;
+    font-size: 11px !important;
+    height: 28px !important;
+    gap: 2px !important;
+    border-radius: 14px !important;
+    max-width: 70px !important;
+  }
+  #touchSitBtn {
+    max-width: 68px !important;
+  }
+  #touchSitName {
+    max-width: 42px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    display: inline-block !important;
+  }
+  #touchTfBtn {
+    max-width: 44px !important;
+  }
   .touch-icon-btn {
-    width: 32px !important;
-    height: 32px !important;
-    font-size: 13px !important;
-    border-radius: 8px !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    font-size: 11.5px !important;
+    border-radius: 7px !important;
+    padding: 0 !important;
+    flex-shrink: 0 !important;
   }
   .touch-mode-btn {
-    padding: 4px 8px !important;
-    font-size: 11px !important;
-    height: 32px !important;
-    border-radius: 10px !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    padding: 0 !important;
+    font-size: 11.5px !important;
+    border-radius: 7px !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
   .touch-mode-btn .touch-mode-label {
     display: none !important;
@@ -4440,14 +4486,22 @@ body.touch-ui-active .touch-replay-bar.minimized {
   .touch-time-badge {
     font-size: 10px !important;
     padding: 2px 5px !important;
+    border-radius: 6px !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
   }
   .touch-ticker-badge {
     font-size: 11px !important;
+    white-space: nowrap !important;
+    flex-shrink: 1 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
   .touch-pnl-pill {
-    font-size: 10px !important;
-    padding: 2px 6px !important;
-    border-radius: 8px !important;
+    display: none !important; /* Hide $0.00 in top bar on iPhone 14 to give room to exact time and price; PnL is in Trade Sheet and Bottom Dock */
+  }
+  .chart-pane-header {
+    display: none !important; /* Never overlap canvas on phones */
   }
 
   /* Floating Replay Mini-Bar on iPhone 14 */

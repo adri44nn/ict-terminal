@@ -283,6 +283,12 @@ function updateLocalNyClock() {
 // 2. LIVE STATUS & KILLZONE BAR
 // ============================================================================
 async function fetchStatus() {
+  const replayTab = document.getElementById('replayTab');
+  const isReplayActive = replayTab && (replayTab.classList.contains('active') || document.body.classList.contains('touch-ui-active'));
+  if (isReplayActive && window.replayEngine && window.replayEngine.getCurrentTime()) {
+    // Keep killzone UI synced with replay candle timestamp
+    return;
+  }
   if (window.ICTEngine) {
     const kz = window.ICTEngine.getKillzoneStatus();
     updateKillzoneUI(kz);
@@ -2536,7 +2542,7 @@ function initReplayBacktester() {
       });
     }
 
-    // Update Time Readout
+    // Update Time Readout & Killzone Status
     const timeReadout = document.getElementById('replayTimeReadout');
     if (state.currentTime) {
       const ny = window.ICTEngine.getNyTime(state.currentTime);
@@ -2545,8 +2551,15 @@ function initReplayBacktester() {
       const s = ny.second.toString().padStart(2, '0');
       const formattedTime = `🕒 ${h}:${m}:${s} NY`;
       if (timeReadout) timeReadout.textContent = formattedTime;
+
+      const kz = state.killzone || window.ICTEngine.getKillzoneStatus(state.currentTime);
+      updateKillzoneUI(kz);
+
       const touchTimeBadge = document.getElementById('touchTimeBadge');
-      if (touchTimeBadge) touchTimeBadge.textContent = formattedTime;
+      if (touchTimeBadge) {
+        const isCompact = window.innerWidth <= 480;
+        touchTimeBadge.textContent = isCompact ? `🕒 ${h}:${m} • ${kz.session_tag}` : `🕒 ${h}:${m}:${s} NY • ${kz.session_tag}`;
+      }
     }
 
     // Update Scrubber
@@ -2741,7 +2754,14 @@ function setupSituationSelector(engine) {
     if (currentNameEl) currentNameEl.textContent = sitName;
     if (fsNameEl) fsNameEl.textContent = `⚡ ${sitName.replace('Situation ', 'Sit ')}`;
     const touchSitEl = document.getElementById('touchSitName');
-    if (touchSitEl) touchSitEl.textContent = `Sit ${sitName.replace('Situation ', '')}`;
+    if (touchSitEl) {
+      let num = '01';
+      const idMatch = (scenario.id || '').match(/\d+/);
+      const nameMatch = (scenario.name || '').match(/(\d+)/);
+      if (idMatch) num = idMatch[0].padStart(2, '0');
+      else if (nameMatch) num = nameMatch[0].padStart(2, '0');
+      touchSitEl.textContent = `Sit ${num}`;
+    }
 
     // Sync fallback select dropdown
     const select = document.getElementById('replayScenarioSelect');
@@ -3465,8 +3485,15 @@ function setupTouchUIManager(engine) {
       const secs = ny.second.toString().padStart(2, '0');
       const formattedTime = `🕒 ${hours}:${mins}:${secs} NY`;
       if (touchTimeReadout) touchTimeReadout.textContent = formattedTime;
+
+      const kz = window.ICTEngine.getKillzoneStatus(curTime);
+      updateKillzoneUI(kz);
+
       const touchTimeBadge = document.getElementById('touchTimeBadge');
-      if (touchTimeBadge) touchTimeBadge.textContent = formattedTime;
+      if (touchTimeBadge) {
+        const isCompact = window.innerWidth <= 480;
+        touchTimeBadge.textContent = isCompact ? `🕒 ${hours}:${mins} • ${kz.session_tag}` : `🕒 ${hours}:${mins}:${secs} NY • ${kz.session_tag}`;
+      }
     }
 
     if (touchScrubber && engine.raw1m && engine.raw1m.length > 0) {
