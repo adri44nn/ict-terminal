@@ -3667,8 +3667,6 @@ body.touch-ui-active .touch-bottom-dock {
   box-sizing: border-box !important;
   flex-shrink: 0;
   z-index: 99 !important;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
 }
 
 .touch-dock-item {
