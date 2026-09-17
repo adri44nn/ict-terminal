@@ -3371,13 +3371,16 @@ body.touch-ui-active .app-container {
   max-width: 100vw !important;
   width: 100vw !important;
   height: 100vh !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
 }
 
 body.touch-ui-active #replayTab {
   display: flex !important;
   flex-direction: column !important;
   height: 100vh !important;
-  max-height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
   width: 100vw !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -3389,9 +3392,10 @@ body.touch-ui-active #replayTab {
 body.touch-ui-active .replay-workspace {
   display: flex !important;
   flex-direction: column !important;
-  flex: 1 !important;
-  height: calc(100vh - 50px - 62px) !important;
+  flex: 1 1 0% !important;
+  height: 100% !important;
   min-height: 0 !important;
+  max-height: none !important;
   padding: 0 !important;
   margin: 0 !important;
   gap: 0 !important;
@@ -4339,6 +4343,10 @@ body.touch-ui-active .touch-replay-bar.minimized {
   color: #94a3b8;
 }
 
+/* ========================================================================== */
+/* RESPONSIVE CALIBRATION: IPHONE 14 (COMPACT NOTCH) & IPAD (HOME BUTTON) */
+/* ========================================================================== */
+
 /* Mobile Situation Modal Responsiveness */
 @media (max-width: 640px) {
   .situation-modal {
@@ -4347,11 +4355,12 @@ body.touch-ui-active .touch-replay-bar.minimized {
   .situation-modal-dialog {
     max-height: 100vh !important;
     height: 100vh !important;
+    height: 100dvh !important;
     border-radius: 0 !important;
     border: none !important;
   }
   .situation-modal-header {
-    padding: 12px 16px !important;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px 16px !important;
   }
   .situation-modal-toolbar {
     padding: 10px 16px !important;
@@ -4365,30 +4374,188 @@ body.touch-ui-active .touch-replay-bar.minimized {
   }
 }
 
-/* iPad Orientation Enhancements (Touch UI) */
-@media (min-width: 768px) and (max-width: 1366px) {
+/* 1. IPHONE 14 & COMPACT PHONES (<= 480px width) */
+@media (max-width: 480px) {
   body.touch-ui-active .touch-top-bar {
-    height: 52px;
-    padding-left: 20px;
-    padding-right: 20px;
+    height: calc(46px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    gap: 4px !important;
   }
-  body.touch-ui-active .touch-bottom-dock {
-    height: 64px;
-    padding-left: 24px;
-    padding-right: 24px;
+  .touch-top-left,
+  .touch-top-right {
+    gap: 4px !important;
   }
-  body.touch-ui-active .touch-sheet {
-    max-width: 580px;
-    left: calc(50% - 290px);
-    border-radius: 20px 20px 0 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.12);
-    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  .touch-top-center {
+    gap: 4px !important;
   }
+  .touch-pill-btn {
+    padding: 4px 7px !important;
+    font-size: 11.5px !important;
+    gap: 3px !important;
+  }
+  .touch-icon-btn {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 13px !important;
+    border-radius: 8px !important;
+  }
+  .touch-mode-btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    height: 32px !important;
+    border-radius: 10px !important;
+  }
+  .touch-mode-btn .touch-mode-label {
+    display: none !important;
+  }
+  .touch-ticker-badge {
+    font-size: 11px !important;
+  }
+  .touch-pnl-pill {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+    border-radius: 8px !important;
+  }
+
+  /* Floating Replay Mini-Bar on iPhone 14 */
   body.touch-ui-active .touch-replay-bar {
-    max-width: 640px;
-    left: calc(50% - 320px);
-    right: auto;
-    width: 640px;
+    left: 8px !important;
+    right: 8px !important;
+    bottom: calc(54px + env(safe-area-inset-bottom, 0px) + 8px) !important;
+    padding: 8px 10px !important;
+    border-radius: 16px !important;
+    gap: 6px !important;
+  }
+  .touch-replay-controls {
+    gap: 4px !important;
+  }
+  .touch-rplay-btn {
+    height: 36px !important;
+    min-width: 36px !important;
+    padding: 0 8px !important;
+    font-size: 12px !important;
+    border-radius: 9px !important;
+  }
+  .touch-rplay-play {
+    height: 36px !important;
+    font-size: 11.5px !important;
+    letter-spacing: 0px !important;
+  }
+  .touch-speed-group {
+    padding: 1px !important;
+    gap: 1px !important;
+    border-radius: 7px !important;
+  }
+  .touch-speed-chip {
+    padding: 4px 5px !important;
+    font-size: 9.5px !important;
+    border-radius: 5px !important;
+  }
+  .touch-scrubber-row {
+    gap: 8px !important;
+  }
+  .touch-time-readout {
+    font-size: 10px !important;
+  }
+
+  /* Bottom Thumb Dock on iPhone 14 */
+  body.touch-ui-active .touch-bottom-dock {
+    height: calc(52px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  }
+  .touch-dock-icon {
+    font-size: 17px !important;
+    margin-bottom: 1px !important;
+  }
+  .touch-dock-label {
+    font-size: 9px !important;
+  }
+
+  /* Action Sheets on iPhone 14 */
+  body.touch-ui-active .touch-sheet {
+    border-radius: 20px 20px 0 0 !important;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .touch-sheet-body {
+    padding: 14px 16px !important;
+    gap: 12px !important;
+  }
+  .touch-buy-btn,
+  .touch-sell-btn {
+    height: 50px !important;
+    border-radius: 12px !important;
+  }
+  .touch-btn-main {
+    font-size: 15px !important;
+  }
+  .touch-tool-tile {
+    min-height: 60px !important;
+    border-radius: 12px !important;
+    padding: 8px 4px !important;
+  }
+}
+
+/* 2. IPAD WITH HOME BUTTON & TABLETS (768px - 1366px width) */
+@media (min-width: 768px) {
+  body.touch-ui-active .touch-top-bar {
+    height: calc(50px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+  .touch-pill-btn {
+    padding: 6px 14px !important;
+    font-size: 13px !important;
+  }
+  .touch-mode-btn .touch-mode-label {
+    display: inline !important;
+  }
+
+  /* Floating iPadOS-style Island Dock */
+  body.touch-ui-active .touch-bottom-dock {
+    width: 520px !important;
+    max-width: 90vw !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) translateZ(0) !important;
+    -webkit-transform: translateX(-50%) translateZ(0) !important;
+    bottom: 12px !important;
+    height: 56px !important;
+    padding-bottom: 0 !important;
+    border-radius: 20px !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* Centered Replay Player Bar on iPad */
+  body.touch-ui-active .touch-replay-bar {
+    width: 580px !important;
+    max-width: 92vw !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) translateZ(0) !important;
+    -webkit-transform: translateX(-50%) translateZ(0) !important;
+    bottom: 78px !important;
+    border-radius: 20px !important;
+  }
+
+  /* Centered Action Sheets on iPad */
+  body.touch-ui-active .touch-sheet {
+    width: 540px !important;
+    max-width: 90vw !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, 105%) translateZ(0) !important;
+    -webkit-transform: translate(-50%, 105%) translateZ(0) !important;
+    border-radius: 24px 24px 0 0 !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+  }
+  body.touch-ui-active .touch-sheet.open {
+    transform: translate(-50%, 0) translateZ(0) !important;
+    -webkit-transform: translate(-50%, 0) translateZ(0) !important;
   }
 }
 
