@@ -842,9 +842,23 @@
           return;
         }
 
+        // 0. Dedicated Delete Tool -> Click or tap any drawing to delete it immediately
+        if (this.activeTool === 'delete') {
+          const hitHandle = this.findDraggableShapeAt(pos.x, pos.y, minPrice, maxPrice);
+          if (hitHandle && hitHandle.shape) {
+            this.undoStack.push([...this.drawings]);
+            this.drawings = this.drawings.filter(s => s !== hitHandle.shape);
+            if (this.selectedShape === hitHandle.shape) this.selectedShape = null;
+            this.render();
+            if (typeof window.showToast === 'function') window.showToast("🗑️ Drawing Deleted");
+          }
+          return;
+        }
+
         // 1. Check if clicking on an interactive draggable shape or handle
         const hitHandle = this.findDraggableShapeAt(pos.x, pos.y, minPrice, maxPrice);
         if (hitHandle) {
+          this.selectedShape = hitHandle.shape;
           this.activeDragHandle = hitHandle;
           this.isDraggingHandle = true;
           this.dragStartPos = { x: pos.x, y: pos.y };
@@ -861,13 +875,21 @@
             startPrice: s.startPrice,
             endPrice: s.endPrice,
             startTime: s.startTime,
-            endTime: s.endTime
+            endTime: s.endTime,
+            points: s.points ? JSON.parse(JSON.stringify(s.points)) : null
           };
+          this.render();
           return;
         }
 
         // 2. Pointer Mode -> Check for price axis drag (right 75px) or smooth 2D chart pan
         if (this.activeTool === 'pointer') {
+          // Deselect any currently active shape if clicking on empty chart space
+          if (this.selectedShape) {
+            this.selectedShape = null;
+            this.render();
+          }
+
           const chartWidth = this.width - 75;
           // Right price axis: vertical zoom
           if (pos.x >= chartWidth) {
@@ -889,6 +911,7 @@
         }
 
         // 3. Start New Drawing
+        this.selectedShape = null;
         this.isDrawing = true;
         const curPrice = priceInfo.price;
         const startTime = this.xToTime(pos.x);
@@ -1018,6 +1041,50 @@
             if (snap.endTime != null) shape.endTime = snap.endTime + startTimeDelta;
             shape.startX = snap.startX + dx;
             shape.endX = snap.endX + dx;
+          } else if (handleType === 'fvg_top') {
+            if (snap.startPrice >= snap.endPrice) shape.startPrice = priceInfo.price;
+            else shape.endPrice = priceInfo.price;
+            shape.startY = pos.y;
+          } else if (handleType === 'fvg_bottom') {
+            if (snap.startPrice <= snap.endPrice) shape.startPrice = priceInfo.price;
+            else shape.endPrice = priceInfo.price;
+            shape.endY = pos.y;
+          } else if (handleType === 'fvg_left') {
+            if (snap.startTime <= snap.endTime) {
+              shape.startTime = curTime;
+              shape.startX = pos.x;
+            } else {
+              shape.endTime = curTime;
+              shape.endX = pos.x;
+            }
+          } else if (handleType === 'fvg_right') {
+            if (snap.startTime >= snap.endTime) {
+              shape.startTime = curTime;
+              shape.startX = pos.x;
+            } else {
+              shape.endTime = curTime;
+              shape.endX = pos.x;
+            }
+          } else if (handleType === 'fvg_top_left') {
+            if (snap.startPrice >= snap.endPrice) shape.startPrice = priceInfo.price;
+            else shape.endPrice = priceInfo.price;
+            if (snap.startTime <= snap.endTime) { shape.startTime = curTime; shape.startX = pos.x; }
+            else { shape.endTime = curTime; shape.endX = pos.x; }
+          } else if (handleType === 'fvg_top_right') {
+            if (snap.startPrice >= snap.endPrice) shape.startPrice = priceInfo.price;
+            else shape.endPrice = priceInfo.price;
+            if (snap.startTime >= snap.endTime) { shape.startTime = curTime; shape.startX = pos.x; }
+            else { shape.endTime = curTime; shape.endX = pos.x; }
+          } else if (handleType === 'fvg_bot_left') {
+            if (snap.startPrice <= snap.endPrice) shape.startPrice = priceInfo.price;
+            else shape.endPrice = priceInfo.price;
+            if (snap.startTime <= snap.endTime) { shape.startTime = curTime; shape.startX = pos.x; }
+            else { shape.endTime = curTime; shape.endX = pos.x; }
+          } else if (handleType === 'fvg_bot_right') {
+            if (snap.startPrice <= snap.endPrice) shape.startPrice = priceInfo.price;
+            else shape.endPrice = priceInfo.price;
+            if (snap.startTime >= snap.endTime) { shape.startTime = curTime; shape.startX = pos.x; }
+            else { shape.endTime = curTime; shape.endX = pos.x; }
           } else if (handleType === 'move_fvg') {
             if (snap.startPrice != null) shape.startPrice = parseFloat((snap.startPrice + priceDelta).toFixed(2));
             if (snap.endPrice != null) shape.endPrice = parseFloat((snap.endPrice + priceDelta).toFixed(2));
@@ -1027,29 +1094,34 @@
             shape.endX = snap.endX + dx;
             shape.startY = snap.startY + dy;
             shape.endY = snap.endY + dy;
+          } else if (handleType === 'liq_start') {
+            shape.startTime = curTime;
+            shape.startPrice = priceInfo.price;
+            shape.startX = pos.x;
+            shape.startY = pos.y;
           } else if (handleType === 'move_liq' || handleType === 'liquidity_text') {
             shape.startPrice = priceInfo.price;
             shape.startY = snap.startY + dy;
           } else if (handleType === 'trendline_start') {
             shape.startTime = curTime;
             shape.startPrice = priceInfo.price;
-            shape.startX = snap.startX + dx;
-            shape.startY = snap.startY + dy;
+            shape.startX = pos.x;
+            shape.startY = pos.y;
           } else if (handleType === 'trendline_end') {
             shape.endTime = curTime;
             shape.endPrice = priceInfo.price;
-            shape.endX = snap.endX + dx;
-            shape.endY = snap.endY + dy;
+            shape.endX = pos.x;
+            shape.endY = pos.y;
           } else if (handleType === 'ote_start') {
             shape.startTime = curTime;
             shape.startPrice = priceInfo.price;
-            shape.startX = snap.startX + dx;
-            shape.startY = snap.startY + dy;
+            shape.startX = pos.x;
+            shape.startY = pos.y;
           } else if (handleType === 'ote_end') {
             shape.endTime = curTime;
             shape.endPrice = priceInfo.price;
-            shape.endX = snap.endX + dx;
-            shape.endY = snap.endY + dy;
+            shape.endX = pos.x;
+            shape.endY = pos.y;
           } else if (handleType === 'move_ote') {
             if (snap.startPrice != null) shape.startPrice = parseFloat((snap.startPrice + priceDelta).toFixed(2));
             if (snap.endPrice != null) shape.endPrice = parseFloat((snap.endPrice + priceDelta).toFixed(2));
@@ -1068,6 +1140,15 @@
             shape.endX = snap.endX + dx;
             shape.startY = snap.startY + dy;
             shape.endY = snap.endY + dy;
+          } else if (handleType === 'move_brush') {
+            if (snap.points) {
+              shape.points = snap.points.map(p => ({
+                x: p.x + dx,
+                y: p.y + dy,
+                time: p.time != null ? p.time + startTimeDelta : null,
+                price: p.price != null ? parseFloat((p.price + priceDelta).toFixed(2)) : null
+              }));
+            }
           }
 
           this.requestRender();
@@ -1078,6 +1159,34 @@
         const visibleCandles = this.getVisibleCandlesSlice();
         const { minPrice, maxPrice } = this.calculatePriceRange(visibleCandles);
         const priceInfo = this.screenToPrice(pos.x, pos.y, minPrice, maxPrice);
+
+        // Update cursor style for pointer or delete tool
+        if (this.activeTool === 'delete') {
+          const hit = this.findDraggableShapeAt(pos.x, pos.y, minPrice, maxPrice);
+          this.canvas.style.cursor = hit ? 'pointer' : 'crosshair';
+        } else if (this.activeTool === 'pointer' && !this.isDraggingHandle && !this.isPanning && !this.priceScaleDragging) {
+          const hit = this.findDraggableShapeAt(pos.x, pos.y, minPrice, maxPrice);
+          if (hit) {
+            const ht = hit.handleType;
+            if (ht === 'fvg_top' || ht === 'fvg_bottom' || ht === 'tp' || ht === 'sl' || ht === 'entry' || ht === 'move_liq' || ht === 'liquidity_text') {
+              this.canvas.style.cursor = 'ns-resize';
+            } else if (ht === 'fvg_left' || ht === 'fvg_right' || ht === 'resize_width') {
+              this.canvas.style.cursor = 'ew-resize';
+            } else if (ht === 'fvg_top_left' || ht === 'fvg_bot_right') {
+              this.canvas.style.cursor = 'nwse-resize';
+            } else if (ht === 'fvg_top_right' || ht === 'fvg_bot_left') {
+              this.canvas.style.cursor = 'nesw-resize';
+            } else if (ht === 'trendline_start' || ht === 'trendline_end' || ht === 'ote_start' || ht === 'ote_end' || ht === 'liq_start') {
+              this.canvas.style.cursor = 'pointer';
+            } else {
+              this.canvas.style.cursor = 'grab';
+            }
+          } else if (pos.x >= this.width - 75) {
+            this.canvas.style.cursor = 'ns-resize';
+          } else {
+            this.canvas.style.cursor = 'default';
+          }
+        }
 
         const barWidth = this.getBarWidth();
         const slot = Math.floor(pos.x / barWidth);
@@ -1293,6 +1402,35 @@
         this.resize();
         this.render();
       });
+
+      // iPad & mobile orientation change handling
+      window.addEventListener('orientationchange', () => {
+        setTimeout(() => {
+          this.resize();
+          this.render();
+        }, 100);
+        setTimeout(() => {
+          this.resize();
+          this.render();
+        }, 300);
+      });
+
+      // Keyboard Delete / Backspace key to delete selected drawing
+      window.addEventListener('keydown', (e) => {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (this.selectedShape) {
+            this.undoStack.push([...this.drawings]);
+            this.drawings = this.drawings.filter(s => s !== this.selectedShape);
+            this.selectedShape = null;
+            this.render();
+            if (typeof window.showToast === 'function') window.showToast("🗑️ Drawing Deleted");
+            e.preventDefault();
+          }
+        }
+      });
     }
 
     openLineLabelModal(shape) {
@@ -1374,7 +1512,7 @@
           }
         }
 
-        // 2. FVG Box
+        // 2. FVG Box (Corners, Edges, and Interior Drag)
         if (shape.type === 'fvg') {
           const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
           const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
@@ -1384,6 +1522,20 @@
           const right = Math.max(x1, x2);
           const top = Math.min(y1, y2);
           const bottom = Math.max(y1, y2);
+
+          // 4 Corner handles
+          if (Math.hypot(x - left, y - top) <= threshold) return { shape, handleType: 'fvg_top_left' };
+          if (Math.hypot(x - right, y - top) <= threshold) return { shape, handleType: 'fvg_top_right' };
+          if (Math.hypot(x - left, y - bottom) <= threshold) return { shape, handleType: 'fvg_bot_left' };
+          if (Math.hypot(x - right, y - bottom) <= threshold) return { shape, handleType: 'fvg_bot_right' };
+
+          // 4 Edge handles
+          if (Math.abs(y - top) <= threshold && x >= left - 4 && x <= right + 4) return { shape, handleType: 'fvg_top' };
+          if (Math.abs(y - bottom) <= threshold && x >= left - 4 && x <= right + 4) return { shape, handleType: 'fvg_bottom' };
+          if (Math.abs(x - left) <= threshold && y >= top - 4 && y <= bottom + 4) return { shape, handleType: 'fvg_left' };
+          if (Math.abs(x - right) <= threshold && y >= top - 4 && y <= bottom + 4) return { shape, handleType: 'fvg_right' };
+
+          // Interior body move
           if (x >= left - 6 && x <= right + 6 && y >= top - 6 && y <= bottom + 6) {
             return { shape, handleType: 'move_fvg' };
           }
@@ -1392,12 +1544,20 @@
         // 3. Liquidity Ray
         if (shape.type === 'liquidity') {
           const yLiq = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
-          const chartWidth = this.width - 75;
-          const midX = chartWidth / 2;
+          const x1 = shape.startTime != null ? Math.max(0, this.timeToX(shape.startTime, barWidth)) : 0;
+          const x2 = this.width - 75;
+          const midX = (x1 + x2) / 2;
+
+          // Start anchor
+          if (Math.hypot(x - x1, y - yLiq) <= threshold) {
+            return { shape, handleType: 'liq_start' };
+          }
+          // Center Text handle
           if (Math.abs(x - midX) <= 50 && Math.abs(y - yLiq) <= threshold) {
             return { shape, handleType: 'liquidity_text' };
           }
-          if (Math.abs(y - yLiq) <= threshold) {
+          // Full line
+          if (x >= x1 - 10 && x <= x2 + 10 && Math.abs(y - yLiq) <= threshold) {
             return { shape, handleType: 'move_liq' };
           }
         }
@@ -1453,6 +1613,18 @@
 
           if (x >= left - 8 && x <= right + 8 && y >= top - 8 && y <= bottom + 8) {
             return { shape, handleType: 'move_ote' };
+          }
+        }
+
+        // 6. Freehand Brush Strokes
+        if (shape.type === 'brush' && shape.points && shape.points.length > 0) {
+          for (let pIdx = 0; pIdx < shape.points.length; pIdx++) {
+            const p = shape.points[pIdx];
+            const px = p.time != null ? this.timeToX(p.time, barWidth) : p.x;
+            const py = p.price != null ? this.priceToY(p.price, minPrice, maxPrice) : p.y;
+            if (Math.hypot(x - px, y - py) <= threshold + 4) {
+              return { shape, handleType: 'move_brush' };
+            }
           }
         }
       }
@@ -2303,8 +2475,92 @@
           });
           ctx.stroke();
         }
+
+        // TradingView-style Selection Dots / Handles when shape is selected with Pointer
+        if (shape === this.selectedShape && !this.isDrawing) {
+          if (shape.type === 'fvg') {
+            const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+            const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+            const y1 = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+            const y2 = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
+            const left = Math.min(x1, x2);
+            const right = Math.max(x1, x2);
+            const top = Math.min(y1, y2);
+            const bottom = Math.max(y1, y2);
+            const midX = (left + right) / 2;
+            const midY = (top + bottom) / 2;
+            this.renderSelectionHandle(ctx, left, top);
+            this.renderSelectionHandle(ctx, right, top);
+            this.renderSelectionHandle(ctx, left, bottom);
+            this.renderSelectionHandle(ctx, right, bottom);
+            this.renderSelectionHandle(ctx, midX, top);
+            this.renderSelectionHandle(ctx, midX, bottom);
+            this.renderSelectionHandle(ctx, left, midY);
+            this.renderSelectionHandle(ctx, right, midY);
+          } else if (shape.type === 'liquidity') {
+            const y = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+            const x1 = shape.startTime != null ? Math.max(0, this.timeToX(shape.startTime, barWidth)) : 0;
+            const x2 = this.width - 75;
+            this.renderSelectionHandle(ctx, x1, y);
+            this.renderSelectionHandle(ctx, (x1 + x2) / 2, y);
+            this.renderSelectionHandle(ctx, x2, y);
+          } else if (shape.type === 'trendline') {
+            const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+            const y1 = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+            const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+            const y2 = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
+            this.renderSelectionHandle(ctx, x1, y1);
+            this.renderSelectionHandle(ctx, x2, y2);
+            this.renderSelectionHandle(ctx, (x1 + x2) / 2, (y1 + y2) / 2);
+          } else if (shape.type === 'ote') {
+            const startAnchorX = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+            const endAnchorX = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+            const yStart = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+            const yEnd = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
+            this.renderSelectionHandle(ctx, startAnchorX, yStart);
+            this.renderSelectionHandle(ctx, endAnchorX, yEnd);
+            this.renderSelectionHandle(ctx, Math.min(startAnchorX, endAnchorX), Math.min(yStart, yEnd));
+            this.renderSelectionHandle(ctx, Math.max(startAnchorX, endAnchorX), Math.max(yStart, yEnd));
+          } else if (shape.type === 'long_pos' || shape.type === 'short_pos') {
+            const isLong = shape.type === 'long_pos';
+            const entryPrice = shape.entryPrice || shape.startPrice;
+            const tpPrice = shape.tpPrice || (isLong ? entryPrice + 40 : entryPrice - 40);
+            const slPrice = shape.slPrice || (isLong ? entryPrice - 15 : entryPrice + 15);
+            const yEntry = this.priceToY(entryPrice, minPrice, maxPrice);
+            const yTp = this.priceToY(tpPrice, minPrice, maxPrice);
+            const ySl = this.priceToY(slPrice, minPrice, maxPrice);
+            const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+            const x2 = shape.endTime != null ? Math.max(x1 + 60, this.timeToX(shape.endTime, barWidth)) : Math.max(shape.startX + 140, shape.endX);
+            const midPos = (x1 + x2) / 2;
+            this.renderSelectionHandle(ctx, midPos, yTp);
+            this.renderSelectionHandle(ctx, midPos, ySl);
+            this.renderSelectionHandle(ctx, midPos, yEntry);
+            this.renderSelectionHandle(ctx, x2, yEntry);
+          } else if (shape.type === 'brush' && shape.points && shape.points.length > 0) {
+            const pFirst = shape.points[0];
+            const pLast = shape.points[shape.points.length - 1];
+            const px1 = pFirst.time != null ? this.timeToX(pFirst.time, barWidth) : pFirst.x;
+            const py1 = pFirst.price != null ? this.priceToY(pFirst.price, minPrice, maxPrice) : pFirst.y;
+            const px2 = pLast.time != null ? this.timeToX(pLast.time, barWidth) : pLast.x;
+            const py2 = pLast.price != null ? this.priceToY(pLast.price, minPrice, maxPrice) : pLast.y;
+            this.renderSelectionHandle(ctx, px1, py1);
+            this.renderSelectionHandle(ctx, px2, py2);
+          }
+        }
         ctx.restore();
       });
+    }
+
+    renderSelectionHandle(ctx, x, y) {
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
 
     renderTextOnLine(ctx, x1, y1, x2, y2, text, color, isDashed = false) {

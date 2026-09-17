@@ -2213,6 +2213,10 @@ function initReplayBacktester() {
       btn.classList.add('active');
       engine.setTool(tool);
 
+      if (tool === 'delete') {
+        showToast("❌ Delete Tool Active • Click any drawing to delete it");
+      }
+
       // Sync active state with touch tool sheet
       const touchTile = document.querySelector(`#touchToolsGrid [data-tool="${tool}"]`);
       if (touchTile) {
@@ -3367,7 +3371,11 @@ function setupTouchUIManager(engine) {
       }
 
       closeAllTouchSheets();
-      showToast(`✏️ ${tool.toUpperCase()} Tool Active • Tap & drag on chart`);
+      if (tool === 'delete') {
+        showToast("❌ Delete Tool Active • Tap any drawing to delete it");
+      } else {
+        showToast(`✏️ ${tool.toUpperCase()} Tool Active • Tap & drag on chart`);
+      }
     });
   });
 

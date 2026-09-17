@@ -4671,3 +4671,169 @@ body.standalone-mode .touch-bottom-dock {
   padding-bottom: max(env(safe-area-inset-bottom, 0px), 14px) !important;
   height: calc(52px + max(env(safe-area-inset-bottom, 0px), 14px)) !important;
 }
+
+/* ========================================================================== */
+/* DEDICATED DELETE / ERASER TOOL STYLES */
+/* ========================================================================== */
+.tool-btn[data-tool="delete"] {
+  color: #f87171;
+}
+.tool-btn[data-tool="delete"]:hover {
+  background: rgba(239, 68, 68, 0.16) !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  color: #fca5a5 !important;
+}
+.tool-btn[data-tool="delete"].active {
+  background: rgba(239, 68, 68, 0.28) !important;
+  border-color: #ef4444 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5) !important;
+}
+
+.touch-tool-tile.touch-tile-warning {
+  border-color: rgba(239, 68, 68, 0.25) !important;
+}
+.touch-tool-tile.touch-tile-warning .touch-tile-icon {
+  color: #f87171 !important;
+}
+.touch-tool-tile.touch-tile-warning:active,
+.touch-tool-tile.touch-tile-warning.active {
+  background: rgba(239, 68, 68, 0.24) !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.45) !important;
+}
+
+/* ========================================================================== */
+/* IPAD & TOUCH DEVICES IN HORIZONTAL / LANDSCAPE MODE */
+/* ========================================================================== */
+@media (orientation: landscape) and (min-width: 768px) {
+  body.touch-ui-active .touch-top-bar {
+    height: calc(44px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(16px, env(safe-area-inset-right, 0px)) !important;
+  }
+
+  body.touch-ui-active .touch-bottom-dock {
+    width: 480px !important;
+    height: 48px !important;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) translateZ(0) !important;
+    -webkit-transform: translateX(-50%) translateZ(0) !important;
+  }
+
+  body.touch-ui-active .touch-replay-bar {
+    width: 560px !important;
+    max-width: 86vw !important;
+    bottom: calc(62px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 50% !important;
+    right: auto !important;
+    padding: 8px 12px !important;
+    gap: 6px !important;
+    transform: translateX(-50%) translateZ(0) !important;
+    -webkit-transform: translateX(-50%) translateZ(0) !important;
+  }
+
+  body.touch-ui-active .touch-replay-bar.minimized {
+    transform: translateX(-50%) translateY(20px) !important;
+    -webkit-transform: translateX(-50%) translateY(20px) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+
+  body.touch-ui-active .touch-sheet {
+    width: 520px !important;
+    max-width: 90vw !important;
+    max-height: 85vh !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, 105%) translateZ(0) !important;
+    -webkit-transform: translate(-50%, 105%) translateZ(0) !important;
+  }
+
+  body.touch-ui-active .touch-sheet.open {
+    transform: translate(-50%, 0) translateZ(0) !important;
+    -webkit-transform: translate(-50%, 0) translateZ(0) !important;
+  }
+}
+
+/* Compact Phones in Landscape (Height <= 500px) */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.touch-ui-active .touch-top-bar {
+    height: calc(36px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-left: max(12px, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(12px, env(safe-area-inset-right, 0px)) !important;
+  }
+  body.touch-ui-active .touch-top-bar .touch-pill-btn {
+    height: 24px !important;
+    padding: 2px 6px !important;
+    font-size: 10px !important;
+  }
+  body.touch-ui-active .touch-icon-btn,
+  body.touch-ui-active .touch-mode-btn {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    font-size: 10px !important;
+  }
+  body.touch-ui-active .touch-bottom-dock {
+    width: 400px !important;
+    height: 40px !important;
+    bottom: calc(4px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) translateZ(0) !important;
+    -webkit-transform: translateX(-50%) translateZ(0) !important;
+  }
+  body.touch-ui-active .touch-dock-btn {
+    padding: 2px !important;
+  }
+  body.touch-ui-active .touch-dock-icon {
+    font-size: 14px !important;
+  }
+  body.touch-ui-active .touch-dock-label {
+    font-size: 8px !important;
+  }
+  body.touch-ui-active .touch-replay-bar {
+    width: 460px !important;
+    max-width: 90vw !important;
+    bottom: calc(48px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 50% !important;
+    right: auto !important;
+    padding: 6px 10px !important;
+    gap: 4px !important;
+    transform: translateX(-50%) translateZ(0) !important;
+    -webkit-transform: translateX(-50%) translateZ(0) !important;
+  }
+  body.touch-ui-active .touch-replay-bar.minimized {
+    transform: translateX(-50%) translateY(20px) !important;
+    -webkit-transform: translateX(-50%) translateY(20px) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+  body.touch-ui-active .touch-rplay-btn {
+    height: 28px !important;
+    min-width: 30px !important;
+    font-size: 10px !important;
+  }
+  body.touch-ui-active .touch-sheet {
+    width: 440px !important;
+    max-width: 92vw !important;
+    max-height: 90vh !important;
+    left: 50% !important;
+    transform: translate(-50%, 105%) translateZ(0) !important;
+    -webkit-transform: translate(-50%, 105%) translateZ(0) !important;
+  }
+  body.touch-ui-active .touch-sheet.open {
+    transform: translate(-50%, 0) translateZ(0) !important;
+    -webkit-transform: translate(-50%, 0) translateZ(0) !important;
+  }
+  body.touch-ui-active .touch-sheet-body {
+    padding: 10px 12px !important;
+  }
+}
