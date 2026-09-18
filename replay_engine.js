@@ -554,6 +554,55 @@
       this.updateUnrealizedPnL();
       this.render();
       this.notifyState();
+      return pos;
+    }
+
+    closeAllPositions() {
+      const positions = [...this.account.openPositions];
+      positions.forEach(pos => this.closePosition(pos.id));
+      this.render();
+      this.notifyState();
+    }
+
+    reversePosition(posId = null) {
+      const pos = posId 
+        ? this.account.openPositions.find(p => p.id === posId)
+        : this.account.openPositions[0];
+      if (!pos) return;
+      const reversedSide = pos.side === 'BUY' ? 'SELL' : 'BUY';
+      const size = pos.size;
+      this.closePosition(pos.id);
+      return this.placeOrder({
+        type: 'MARKET',
+        side: reversedSide,
+        size: size,
+        model: 'Touch Reverse'
+      });
+    }
+
+    setBreakEven(posId = null) {
+      const pos = posId
+        ? this.account.openPositions.find(p => p.id === posId)
+        : this.account.openPositions[0];
+      if (!pos) return;
+      pos.sl = pos.entryPrice;
+      this.render();
+      this.notifyState();
+    }
+
+    updatePositionBracket(posId, sl, tp) {
+      const pos = posId
+        ? this.account.openPositions.find(p => p.id === posId)
+        : this.account.openPositions[0];
+      if (!pos) return;
+      if (sl !== undefined) pos.sl = sl ? parseFloat(sl) : null;
+      if (tp !== undefined) pos.tp = tp ? parseFloat(tp) : null;
+      this.render();
+      this.notifyState();
+    }
+
+    executeOrder(side, type = 'MARKET', price = null, size = 1, sl = null, tp = null) {
+      return this.placeOrder({ type, side, size, price, sl, tp, model: "Touch Execution" });
     }
 
     processIntrabarOrders(bar) {
