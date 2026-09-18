@@ -3062,12 +3062,31 @@ function setupTouchUIManager(engine) {
   const touchQuickBeBtn = document.getElementById('touchQuickBeBtn');
   const touchQuickCloseBtn = document.getElementById('touchQuickCloseBtn');
   const touchQuickOpenPadBtn = document.getElementById('touchQuickOpenPadBtn');
+  const touchHudCollapseBtn = document.getElementById('touchHudCollapseBtn');
+  const touchHudMinToggle = document.getElementById('touchHudMinToggle');
+
+  // Order Type & Limit Order Controls
+  const touchTypeMarketBtn = document.getElementById('touchTypeMarketBtn');
+  const touchTypeLimitBtn = document.getElementById('touchTypeLimitBtn');
+  const touchLimitConfigPanel = document.getElementById('touchLimitConfigPanel');
+  const touchLimitPriceInput = document.getElementById('touchLimitPriceInput');
+  const touchLimitMinusBtn = document.getElementById('touchLimitMinusBtn');
+  const touchLimitPlusBtn = document.getElementById('touchLimitPlusBtn');
+  const touchLimitSnapBtn = document.getElementById('touchLimitSnapBtn');
+  const touchLimitDiffBadge = document.getElementById('touchLimitDiffBadge');
+  const touchBuyBtnLabel = document.getElementById('touchBuyBtnLabel');
+  const touchSellBtnLabel = document.getElementById('touchSellBtnLabel');
+  const touchPendingSection = document.getElementById('touchPendingSection');
+  const touchPendingCount = document.getElementById('touchPendingCount');
+  const touchPendingList = document.getElementById('touchPendingList');
+  const touchCancelAllPendingBtn = document.getElementById('touchCancelAllPendingBtn');
 
   // Tools Sheet Controls
   const touchToolTiles = document.querySelectorAll('#touchToolsGrid .touch-tool-tile');
   const touchUndoBtn = document.getElementById('touchUndoBtn');
   const touchClearDrawingsBtn = document.getElementById('touchClearDrawingsBtn');
   const touchAutoFvgTile = document.getElementById('touchAutoFvgTile');
+  const touchFavStrip = document.getElementById('touchFavStrip');
 
   // Timeframe Sheet Controls
   const touchTfBtns = document.querySelectorAll('#touchTfGrid .touch-tf-btn');
@@ -3080,6 +3099,7 @@ function setupTouchUIManager(engine) {
 
   let currentQty = 1;
   let bracketMode = 'pts'; // 'pts' or 'price'
+  let currentOrderType = 'MARKET'; // 'MARKET' or 'LIMIT'
   let lastPrice = null;
 
   // --- SHEET MANAGEMENT ---
@@ -3422,13 +3442,17 @@ function setupTouchUIManager(engine) {
       return;
     }
 
+    const isLimit = currentOrderType === 'LIMIT';
+    const lmtVal = parseFloat(touchLimitPriceInput?.value);
+    const basePrice = (isLimit && lmtVal) ? lmtVal : curPrice;
+
     if (bracketMode === 'pts') {
       const slPts = parseFloat(touchSlPtsInput?.value) || 0;
       const tpPts = parseFloat(touchTpPtsInput?.value) || 0;
-      const buySl = slPts > 0 ? (curPrice - slPts).toFixed(2) : null;
-      const buyTp = tpPts > 0 ? (curPrice + tpPts).toFixed(2) : null;
-      const sellSl = slPts > 0 ? (curPrice + slPts).toFixed(2) : null;
-      const sellTp = tpPts > 0 ? (curPrice - tpPts).toFixed(2) : null;
+      const buySl = slPts > 0 ? (basePrice - slPts).toFixed(2) : null;
+      const buyTp = tpPts > 0 ? (basePrice + tpPts).toFixed(2) : null;
+      const sellSl = slPts > 0 ? (basePrice + slPts).toFixed(2) : null;
+      const sellTp = tpPts > 0 ? (basePrice - tpPts).toFixed(2) : null;
 
       if (touchBuySub) {
         touchBuySub.textContent = (buySl ? `SL: ${buySl}` : 'No SL') + (buyTp ? ` | TP: ${buyTp}` : '');
@@ -3448,6 +3472,101 @@ function setupTouchUIManager(engine) {
     }
   }
 
+  // Order Type Mode Selection (MARKET vs LIMIT)
+  function setOrderType(type) {
+    currentOrderType = type;
+    if (touchTypeMarketBtn) touchTypeMarketBtn.classList.toggle('active', type === 'MARKET');
+    if (touchTypeLimitBtn) touchTypeLimitBtn.classList.toggle('active', type === 'LIMIT');
+    if (touchLimitConfigPanel) touchLimitConfigPanel.style.display = type === 'LIMIT' ? 'block' : 'none';
+    if (touchBuyBtnLabel) touchBuyBtnLabel.textContent = type === 'LIMIT' ? '🟢 BUY LMT' : '🟢 BUY MKT';
+    if (touchSellBtnLabel) touchSellBtnLabel.textContent = type === 'LIMIT' ? '🔴 SELL LMT' : '🔴 SELL MKT';
+
+    if (type === 'LIMIT' && touchLimitPriceInput && !touchLimitPriceInput.value) {
+      const cur = engine.getCurrentPrice();
+      if (cur) touchLimitPriceInput.value = cur.toFixed(2);
+    }
+    updateLimitDiffBadge();
+    updateBracketPreviews();
+  }
+
+  if (touchTypeMarketBtn) touchTypeMarketBtn.addEventListener('click', () => setOrderType('MARKET'));
+  if (touchTypeLimitBtn) touchTypeLimitBtn.addEventListener('click', () => setOrderType('LIMIT'));
+
+  function updateLimitDiffBadge() {
+    if (!touchLimitDiffBadge || !touchLimitPriceInput) return;
+    const cur = engine.getCurrentPrice();
+    const lmt = parseFloat(touchLimitPriceInput.value);
+    if (!cur || !lmt) {
+      touchLimitDiffBadge.textContent = '@ Market';
+      return;
+    }
+    const diff = lmt - cur;
+    if (Math.abs(diff) < 0.25) {
+      touchLimitDiffBadge.textContent = '@ Market Price';
+      touchLimitDiffBadge.style.color = '#94a3b8';
+    } else if (diff > 0) {
+      touchLimitDiffBadge.textContent = `+${diff.toFixed(2)} pts above market`;
+      touchLimitDiffBadge.style.color = '#38bdf8';
+    } else {
+      touchLimitDiffBadge.textContent = `${diff.toFixed(2)} pts below market`;
+      touchLimitDiffBadge.style.color = '#f59e0b';
+    }
+  }
+
+  if (touchLimitPriceInput) {
+    touchLimitPriceInput.addEventListener('input', () => {
+      updateLimitDiffBadge();
+      updateBracketPreviews();
+    });
+  }
+
+  if (touchLimitMinusBtn) {
+    touchLimitMinusBtn.addEventListener('click', () => {
+      const cur = parseFloat(touchLimitPriceInput?.value) || engine.getCurrentPrice() || 20000;
+      if (touchLimitPriceInput) {
+        touchLimitPriceInput.value = (cur - 5).toFixed(2);
+        updateLimitDiffBadge();
+        updateBracketPreviews();
+      }
+    });
+  }
+
+  if (touchLimitPlusBtn) {
+    touchLimitPlusBtn.addEventListener('click', () => {
+      const cur = parseFloat(touchLimitPriceInput?.value) || engine.getCurrentPrice() || 20000;
+      if (touchLimitPriceInput) {
+        touchLimitPriceInput.value = (cur + 5).toFixed(2);
+        updateLimitDiffBadge();
+        updateBracketPreviews();
+      }
+    });
+  }
+
+  if (touchLimitSnapBtn) {
+    touchLimitSnapBtn.addEventListener('click', () => {
+      const cur = engine.getCurrentPrice();
+      if (cur && touchLimitPriceInput) {
+        touchLimitPriceInput.value = cur.toFixed(2);
+        updateLimitDiffBadge();
+        updateBracketPreviews();
+      }
+    });
+  }
+
+  // Quick Chart HUD Minimize / Collapse
+  if (touchHudCollapseBtn && touchChartExecBar) {
+    touchHudCollapseBtn.addEventListener('click', () => {
+      touchChartExecBar.classList.add('minimized');
+      if (touchHudMinToggle) touchHudMinToggle.style.display = 'flex';
+    });
+  }
+  if (touchHudMinToggle && touchChartExecBar) {
+    touchHudMinToggle.addEventListener('click', () => {
+      touchChartExecBar.classList.remove('minimized');
+      touchHudMinToggle.style.display = 'none';
+    });
+  }
+
   // Unified Trade Execution Function
   function executeTrade(side) {
     const curPrice = engine.getCurrentPrice();
@@ -3455,6 +3574,10 @@ function setupTouchUIManager(engine) {
       showToast('⚠️ No price data available');
       return;
     }
+
+    const isLimit = currentOrderType === 'LIMIT';
+    const limitPrice = isLimit ? (parseFloat(touchLimitPriceInput?.value) || curPrice) : null;
+    const basePrice = isLimit ? limitPrice : curPrice;
 
     let sl = null;
     let tp = null;
@@ -3464,30 +3587,44 @@ function setupTouchUIManager(engine) {
       const tpPts = parseFloat(touchTpPtsInput?.value) || 0;
 
       if (side === 'BUY') {
-        if (slPts > 0) sl = Number((curPrice - slPts).toFixed(2));
-        if (tpPts > 0) tp = Number((curPrice + tpPts).toFixed(2));
+        if (slPts > 0) sl = Number((basePrice - slPts).toFixed(2));
+        if (tpPts > 0) tp = Number((basePrice + tpPts).toFixed(2));
       } else {
-        if (slPts > 0) sl = Number((curPrice + slPts).toFixed(2));
-        if (tpPts > 0) tp = Number((curPrice - tpPts).toFixed(2));
+        if (slPts > 0) sl = Number((basePrice + slPts).toFixed(2));
+        if (tpPts > 0) tp = Number((basePrice - tpPts).toFixed(2));
       }
     } else {
       sl = parseFloat(touchSlInput?.value) || null;
       tp = parseFloat(touchTpInput?.value) || null;
     }
 
-    engine.placeOrder({
-      type: 'MARKET',
-      side: side,
-      size: currentQty,
-      sl: sl,
-      tp: tp,
-      model: 'Touch Execution'
-    });
-
     const sym = engine.scenario?.symbol || 'MNQ';
     const slMsg = sl ? ` | SL: ${sl.toFixed(2)}` : '';
     const tpMsg = tp ? ` | TP: ${tp.toFixed(2)}` : '';
-    showToast(`${side === 'BUY' ? '🟢 BUY' : '🔴 SELL'} ${currentQty}x ${sym} @ $${curPrice.toFixed(2)}${slMsg}${tpMsg}`);
+
+    if (isLimit) {
+      engine.placeOrder({
+        type: 'LIMIT',
+        side: side,
+        price: limitPrice,
+        size: currentQty,
+        sl: sl,
+        tp: tp,
+        model: 'Touch Limit Execution'
+      });
+      showToast(`⏳ LIMIT ${side} ${currentQty}x ${sym} @ $${limitPrice.toFixed(2)}${slMsg}${tpMsg}`);
+    } else {
+      engine.placeOrder({
+        type: 'MARKET',
+        side: side,
+        size: currentQty,
+        sl: sl,
+        tp: tp,
+        model: 'Touch Execution'
+      });
+      showToast(`${side === 'BUY' ? '🟢 BUY' : '🔴 SELL'} ${currentQty}x ${sym} @ $${curPrice.toFixed(2)}${slMsg}${tpMsg}`);
+    }
+
     syncTouchTradeSheet();
     syncTouchState();
   }
@@ -3553,6 +3690,15 @@ function setupTouchUIManager(engine) {
         syncTouchTradeSheet();
         syncTouchState();
       }
+    });
+  }
+
+  if (touchCancelAllPendingBtn) {
+    touchCancelAllPendingBtn.addEventListener('click', () => {
+      engine.cancelAllPendingOrders();
+      showToast('🗑️ All Limit Orders Cancelled');
+      syncTouchTradeSheet();
+      syncTouchState();
     });
   }
 
@@ -3626,13 +3772,137 @@ function setupTouchUIManager(engine) {
       if (touchOpenPosCard) touchOpenPosCard.style.display = 'none';
       if (touchQuickPosPill) touchQuickPosPill.style.display = 'none';
     }
+
+    // Pending Limit Orders HUD
+    const pendingOrders = engine.account?.pendingOrders || [];
+    if (touchPendingSection && touchPendingList) {
+      if (pendingOrders.length > 0) {
+        touchPendingSection.style.display = 'block';
+        if (touchPendingCount) touchPendingCount.textContent = pendingOrders.length;
+        touchPendingList.innerHTML = pendingOrders.map(order => {
+          const isBuy = order.side === 'BUY';
+          const sideColor = isBuy ? '#38bdf8' : '#f59e0b';
+          const slInfo = order.sl ? ` | SL: ${order.sl.toFixed(2)}` : '';
+          const tpInfo = order.tp ? ` | TP: ${order.tp.toFixed(2)}` : '';
+          return `
+            <div class="touch-pending-item" data-order-id="${order.id}">
+              <div class="touch-pending-left">
+                <span class="touch-pending-badge" style="color: ${sideColor}; border-color: ${sideColor};">
+                  ${isBuy ? '🟢 BUY LMT' : '🔴 SELL LMT'} ${order.size}x
+                </span>
+                <span class="touch-pending-price">@ $${order.entryPrice.toFixed(2)}</span>
+                <span class="touch-pending-sltp">${slInfo}${tpInfo}</span>
+              </div>
+              <button class="touch-pending-cancel-btn" data-cancel-id="${order.id}" title="Cancel Limit Order">✕</button>
+            </div>
+          `;
+        }).join('');
+
+        touchPendingList.querySelectorAll('.touch-pending-cancel-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const orderId = btn.getAttribute('data-cancel-id');
+            engine.cancelPendingOrder(orderId);
+            showToast('🗑️ Limit Order Cancelled');
+            syncTouchTradeSheet();
+            syncTouchState();
+          });
+        });
+      } else {
+        touchPendingSection.style.display = 'none';
+      }
+    }
   }
 
-  // --- DRAWING TOOLS SHEET ---
+  // --- FAVORITE TOOLS & DRAWING TOOLS SHEET ---
+  const TOOL_METADATA = {
+    pointer: { icon: '↖️', label: 'Pointer' },
+    fvg: { icon: '🟩', label: 'FVG' },
+    breaker: { icon: '⚡', label: 'Breaker' },
+    liquidity: { icon: '🟣', label: 'Liquidity' },
+    ote: { icon: '📐', label: 'Fib/EQ' },
+    long_pos: { icon: '🟢', label: 'Long' },
+    short_pos: { icon: '🔴', label: 'Short' },
+    trendline: { icon: '📈', label: 'Line' },
+    brush: { icon: '✏️', label: 'Pen' },
+    delete: { icon: '❌', label: 'Delete' }
+  };
+
+  function getFavoriteTools() {
+    try {
+      const saved = localStorage.getItem('pb_favorite_tools');
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return ['pointer', 'fvg', 'breaker', 'trendline'];
+  }
+
+  function saveFavoriteTools(favs) {
+    try {
+      localStorage.setItem('pb_favorite_tools', JSON.stringify(favs));
+    } catch(e) {}
+  }
+
+  function renderTouchFavoriteStrip() {
+    if (!touchFavStrip) return;
+    const favs = getFavoriteTools();
+
+    // Update stars on grid
+    document.querySelectorAll('.touch-tool-star-btn').forEach(starBtn => {
+      const tool = starBtn.getAttribute('data-star-tool');
+      const isFav = favs.includes(tool);
+      starBtn.classList.toggle('starred', isFav);
+    });
+
+    touchFavStrip.innerHTML = favs.map(tool => {
+      const meta = TOOL_METADATA[tool] || { icon: '✏️', label: tool };
+      const isActive = engine.activeTool === tool;
+      return `
+        <button class="touch-fav-chip ${isActive ? 'active' : ''}" data-fav-select="${tool}">
+          <span class="touch-fav-icon">${meta.icon}</span>
+          <span class="touch-fav-label">${meta.label}</span>
+        </button>
+      `;
+    }).join('');
+
+    touchFavStrip.querySelectorAll('.touch-fav-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const tool = chip.getAttribute('data-fav-select');
+        if (tool) {
+          engine.setTool(tool);
+          touchToolTiles.forEach(t => t.classList.toggle('active', t.getAttribute('data-tool') === tool));
+          renderTouchFavoriteStrip();
+          closeAllTouchSheets();
+          showToast(`✏️ ${tool.toUpperCase()} Active`);
+        }
+      });
+    });
+  }
+
+  // Wire star toggle buttons
+  document.querySelectorAll('.touch-tool-star-btn').forEach(starBtn => {
+    starBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const tool = starBtn.getAttribute('data-star-tool');
+      if (!tool) return;
+      let favs = getFavoriteTools();
+      if (favs.includes(tool)) {
+        favs = favs.filter(t => t !== tool);
+        showToast(`Unpinned ${tool} from favorites`);
+      } else {
+        favs.push(tool);
+        showToast(`★ Added ${tool} to favorites`);
+      }
+      saveFavoriteTools(favs);
+      renderTouchFavoriteStrip();
+    });
+  });
+
   touchToolTiles.forEach(tile => {
     const tool = tile.getAttribute('data-tool');
     if (!tool) return;
-    tile.addEventListener('click', () => {
+    tile.addEventListener('click', (e) => {
+      if (e.target.closest('.touch-tool-star-btn')) return;
       if (tool === 'toggle_automarkup') {
         const active = engine.toggleAutoMarkup();
         tile.classList.toggle('active', !!active);
@@ -3650,6 +3920,7 @@ function setupTouchUIManager(engine) {
         desktopBtn.classList.add('active');
       }
 
+      renderTouchFavoriteStrip();
       closeAllTouchSheets();
       if (tool === 'delete') {
         showToast("❌ Delete Tool Active • Tap any drawing to delete it");
@@ -3803,6 +4074,48 @@ function setupTouchUIManager(engine) {
     syncTouchTradeSheet();
   }
 
+  // Dynamic crosshair movement and top time sync
+  engine.onCursorMove = (cursor) => {
+    const badge = document.getElementById('touchTimeBadge');
+    const readout = document.getElementById('touchTimeReadout');
+    const isCompact = window.innerWidth <= 480;
+
+    if (cursor && cursor.time) {
+      const ny = window.ICTEngine ? window.ICTEngine.getNyTime(cursor.time) : null;
+      if (ny) {
+        const hours = ny.hour.toString().padStart(2, '0');
+        const mins = ny.minute.toString().padStart(2, '0');
+        const secs = (ny.second || 0).toString().padStart(2, '0');
+        const kz = window.ICTEngine ? window.ICTEngine.getKillzoneStatus(cursor.time) : null;
+        const kzTag = kz?.session_tag ? ` • ${kz.session_tag}` : '';
+        if (badge) {
+          badge.textContent = isCompact ? `🕒 ${hours}:${mins}` : `🕒 ${hours}:${mins}:${secs} NY${kzTag}`;
+        }
+        if (readout) {
+          readout.textContent = `🕒 ${hours}:${mins}:${secs} NY`;
+        }
+      }
+    } else {
+      const curTime = engine.getCurrentTime();
+      if (curTime) {
+        const ny = window.ICTEngine ? window.ICTEngine.getNyTime(curTime) : null;
+        if (ny) {
+          const hours = ny.hour.toString().padStart(2, '0');
+          const mins = ny.minute.toString().padStart(2, '0');
+          const secs = (ny.second || 0).toString().padStart(2, '0');
+          const kz = window.ICTEngine ? window.ICTEngine.getKillzoneStatus(curTime) : null;
+          const kzTag = kz?.session_tag ? ` • ${kz.session_tag}` : '';
+          if (badge) {
+            badge.textContent = isCompact ? `🕒 ${hours}:${mins}${kzTag}` : `🕒 ${hours}:${mins}:${secs} NY${kzTag}`;
+          }
+          if (readout) {
+            readout.textContent = `🕒 ${hours}:${mins}:${secs} NY`;
+          }
+        }
+      }
+    }
+  };
+
   // Hook into engine events
   const existingOnState = engine.onStateChange;
   engine.onStateChange = (state) => {
@@ -3821,6 +4134,7 @@ function setupTouchUIManager(engine) {
   // Initial Sync
   syncTouchState();
   renderTouchJournal();
+  renderTouchFavoriteStrip();
 }
 
 function setupScenarioModal(engine) {

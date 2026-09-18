@@ -12,14 +12,15 @@
   <meta name="theme-color" content="#0a0e17">
   <link rel="manifest" href="manifest.json?v=5.0">
   <title>PB Trades ICT Replay Backtester & Academy</title>
-  <link rel="stylesheet" href="styles.css?v=10.22">
+  <link rel="stylesheet" href="styles.css?v=10.23">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230a0e17%22/><text x=%2250%22 y=%2270%22 font-size=%2265%22 text-anchor=%22middle%22>⚡</text></svg>">
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
   <script>
+    // Global immediate version check to avoid stale cache issues
     (function() {
       try {
-        var APP_VERSION = '10.22';
+        var APP_VERSION = '10.23';
         var storedVersion = localStorage.getItem('pb_app_version');
         if (storedVersion !== APP_VERSION) {
           localStorage.setItem('pb_app_version', APP_VERSION);
@@ -244,6 +245,7 @@
         <div class="tv-drawing-toolbar" id="tvDrawingToolbar">
           <button class="tool-btn active" data-tool="pointer" title="Select & Pan Chart">↖️</button>
           <button class="tool-btn" data-tool="fvg" title="Draw FVG Box (with 50% CE Line)">🟩 FVG</button>
+          <button class="tool-btn" data-tool="breaker" title="Draw ICT Breaker Block (+BB / -BB with 50% MT)">⚡ Breaker</button>
           <button class="tool-btn" data-tool="liquidity" title="BSL / SSL Liquidity Ray">🟣 Liq</button>
           <button class="tool-btn" data-tool="ote" title="ICT Fibonacci: Premium / Discount Equilibrium (0.50) & OTE (0.62-0.705-0.79)">📐 Fib / EQ</button>
           <button class="tool-btn" data-tool="long_pos" title="Long Position Risk:Reward Tool">🟢 Long</button>
@@ -355,16 +357,20 @@
               <canvas id="replayCanvas"></canvas>
               <!-- FLOATING ON-CHART QUICK TRADE BAR FOR TOUCH UI -->
               <div class="touch-chart-exec-bar" id="touchChartExecBar">
-                <button class="touch-hud-btn touch-hud-buy" id="touchQuickBuyBtn">🟢 BUY</button>
-                <div class="touch-hud-qty-badge" id="touchQuickQtyBadge">1x</div>
-                <button class="touch-hud-btn touch-hud-sell" id="touchQuickSellBtn">🔴 SELL</button>
-                <div class="touch-hud-pos-pill" id="touchQuickPosPill" style="display: none;">
-                  <span class="touch-hud-pos-side" id="touchQuickPosSide">LONG</span>
-                  <span class="touch-hud-pos-pnl" id="touchQuickPosPnl">+$0.00</span>
-                  <button class="touch-hud-be-btn" id="touchQuickBeBtn" title="Break-Even">BE</button>
-                  <button class="touch-hud-close-btn" id="touchQuickCloseBtn" title="Close Position">✕</button>
+                <button class="touch-hud-min-toggle" id="touchHudMinToggle" title="Toggle Quick Bar Minimized" style="display: none;">⚡</button>
+                <div class="touch-hud-content" id="touchHudContent">
+                  <button class="touch-hud-btn touch-hud-buy" id="touchQuickBuyBtn">🟢 BUY</button>
+                  <div class="touch-hud-qty-badge" id="touchQuickQtyBadge">1x</div>
+                  <button class="touch-hud-btn touch-hud-sell" id="touchQuickSellBtn">🔴 SELL</button>
+                  <div class="touch-hud-pos-pill" id="touchQuickPosPill" style="display: none;">
+                    <span class="touch-hud-pos-side" id="touchQuickPosSide">LONG</span>
+                    <span class="touch-hud-pos-pnl" id="touchQuickPosPnl">+$0.00</span>
+                    <button class="touch-hud-be-btn" id="touchQuickBeBtn" title="Break-Even">BE</button>
+                    <button class="touch-hud-close-btn" id="touchQuickCloseBtn" title="Close Position">✕</button>
+                  </div>
+                  <button class="touch-hud-pad-btn" id="touchQuickOpenPadBtn" title="Open Touch Execution Pad">⚡</button>
+                  <button class="touch-hud-collapse-btn" id="touchHudCollapseBtn" title="Minimize Quick Bar">─</button>
                 </div>
-                <button class="touch-hud-pad-btn" id="touchQuickOpenPadBtn" title="Open Touch Execution Pad">⚡</button>
               </div>
             </div>
 
@@ -717,16 +723,49 @@
             </div>
           </div>
 
+          <!-- ORDER TYPE TOGGLE: MARKET VS LIMIT -->
+          <div class="touch-order-type-container">
+            <div class="touch-order-type-toggle" id="touchOrderTypeToggle">
+              <button class="touch-order-type-btn active" data-type="MARKET" id="touchTypeMarketBtn">⚡ Market Order</button>
+              <button class="touch-order-type-btn" data-type="LIMIT" id="touchTypeLimitBtn">⏳ Limit Order</button>
+            </div>
+          </div>
+
+          <!-- LIMIT PRICE CONFIG (Visible only in LIMIT mode) -->
+          <div class="touch-limit-config-panel" id="touchLimitConfigPanel" style="display: none;">
+            <div class="touch-section-label-row">
+              <span class="touch-section-label">Target Limit Price:</span>
+              <span class="touch-limit-diff" id="touchLimitDiffBadge">@ Market Price</span>
+            </div>
+            <div class="touch-limit-stepper-row">
+              <button class="touch-stepper-btn" id="touchLimitMinusBtn" title="Minus 5 points">−5 pts</button>
+              <input type="number" id="touchLimitPriceInput" step="0.25" class="touch-input touch-limit-input" placeholder="Limit Price">
+              <button class="touch-stepper-btn" id="touchLimitPlusBtn" title="Plus 5 points">+5 pts</button>
+              <button class="touch-limit-snap-btn" id="touchLimitSnapBtn" title="Set to Current Price">Match Mkt</button>
+            </div>
+          </div>
+
           <!-- BIG THUMB BUY & SELL BUTTONS WITH DYNAMIC BRACKET PREVIEW -->
           <div class="touch-exec-action-buttons">
             <button class="touch-buy-btn" id="touchBuyBtn">
-              <span class="touch-btn-main">🟢 BUY MKT</span>
+              <span class="touch-btn-main" id="touchBuyBtnLabel">🟢 BUY MKT</span>
               <span class="touch-btn-sub" id="touchBuySub">Ask Price</span>
             </button>
             <button class="touch-sell-btn" id="touchSellBtn">
-              <span class="touch-btn-main">🔴 SELL MKT</span>
+              <span class="touch-btn-main" id="touchSellBtnLabel">🔴 SELL MKT</span>
               <span class="touch-btn-sub" id="touchSellSub">Bid Price</span>
             </button>
+          </div>
+
+          <!-- PENDING LIMIT ORDERS HUD LIST -->
+          <div class="touch-pending-section" id="touchPendingSection" style="display: none;">
+            <div class="touch-section-label-row">
+              <span class="touch-section-label">⏳ Pending Orders (<span id="touchPendingCount">0</span>):</span>
+              <button class="touch-link-action" id="touchCancelAllPendingBtn">Cancel All</button>
+            </div>
+            <div class="touch-pending-list" id="touchPendingList">
+              <!-- Dynamically populated -->
+            </div>
           </div>
 
           <!-- LOT SIZE STEPPER & CHIPS -->
@@ -834,36 +873,60 @@
           <button class="touch-sheet-close" id="touchToolsCloseBtn">✕</button>
         </div>
         <div class="touch-sheet-body">
+          <!-- FAVORITE TOOLS QUICK ACCESS STRIP -->
+          <div class="touch-fav-section" id="touchFavSection">
+            <div class="touch-fav-header">
+              <span class="touch-fav-title">★ QUICK FAVORITES</span>
+              <span class="touch-fav-hint">Tap ★ on any tool to pin</span>
+            </div>
+            <div class="touch-fav-strip" id="touchFavStrip">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
           <div class="touch-tools-grid" id="touchToolsGrid">
             <button class="touch-tool-tile active" data-tool="pointer">
+              <span class="touch-tool-star-btn" data-star-tool="pointer" title="Favorite">★</span>
               <span class="touch-tile-icon">↖️</span>
               <span class="touch-tile-label">Pointer / Pan</span>
             </button>
             <button class="touch-tool-tile" data-tool="fvg">
+              <span class="touch-tool-star-btn" data-star-tool="fvg" title="Favorite">★</span>
               <span class="touch-tile-icon">🟩</span>
               <span class="touch-tile-label">FVG Box</span>
             </button>
+            <button class="touch-tool-tile" data-tool="breaker">
+              <span class="touch-tool-star-btn" data-star-tool="breaker" title="Favorite">★</span>
+              <span class="touch-tile-icon">⚡</span>
+              <span class="touch-tile-label">Breaker (+/-BB)</span>
+            </button>
             <button class="touch-tool-tile" data-tool="liquidity">
+              <span class="touch-tool-star-btn" data-star-tool="liquidity" title="Favorite">★</span>
               <span class="touch-tile-icon">🟣</span>
               <span class="touch-tile-label">Liquidity Ray</span>
             </button>
             <button class="touch-tool-tile" data-tool="ote">
+              <span class="touch-tool-star-btn" data-star-tool="ote" title="Favorite">★</span>
               <span class="touch-tile-icon">📐</span>
               <span class="touch-tile-label">Fib / EQ</span>
             </button>
             <button class="touch-tool-tile" data-tool="long_pos">
+              <span class="touch-tool-star-btn" data-star-tool="long_pos" title="Favorite">★</span>
               <span class="touch-tile-icon">🟢</span>
               <span class="touch-tile-label">Long Pos</span>
             </button>
             <button class="touch-tool-tile" data-tool="short_pos">
+              <span class="touch-tool-star-btn" data-star-tool="short_pos" title="Favorite">★</span>
               <span class="touch-tile-icon">🔴</span>
               <span class="touch-tile-label">Short Pos</span>
             </button>
             <button class="touch-tool-tile" data-tool="trendline">
+              <span class="touch-tool-star-btn" data-star-tool="trendline" title="Favorite">★</span>
               <span class="touch-tile-icon">📈</span>
               <span class="touch-tile-label">Trendline</span>
             </button>
             <button class="touch-tool-tile" data-tool="brush">
+              <span class="touch-tool-star-btn" data-star-tool="brush" title="Favorite">★</span>
               <span class="touch-tile-icon">✏️</span>
               <span class="touch-tile-label">Freehand Pen</span>
             </button>
@@ -872,6 +935,7 @@
               <span class="touch-tile-label">Auto FVGs</span>
             </button>
             <button class="touch-tool-tile touch-tile-warning" data-tool="delete" id="touchDeleteTile">
+              <span class="touch-tool-star-btn" data-star-tool="delete" title="Favorite">★</span>
               <span class="touch-tile-icon">❌</span>
               <span class="touch-tile-label">Delete Tool</span>
             </button>
@@ -1154,6 +1218,7 @@
         <div class="tv-drawing-toolbar" id="markupDrawingToolbar">
           <button class="tool-btn active" data-tool="pointer" title="Select & Pan">↖️</button>
           <button class="tool-btn" data-tool="fvg" title="Draw FVG Box">🟩 FVG</button>
+          <button class="tool-btn" data-tool="breaker" title="Draw Breaker Block">⚡ Breaker</button>
           <button class="tool-btn" data-tool="liquidity" title="BSL / SSL Liquidity Ray">🟣 Liq</button>
           <button class="tool-btn" data-tool="ote" title="ICT OTE Fibonacci">📏 OTE</button>
           <button class="tool-btn" data-tool="long_pos" title="Long Position R:R">🟢 Long</button>
@@ -1287,11 +1352,11 @@
   <div class="toast-notification" id="toastBox">Notification</div>
 
   <!-- LOAD SCRIPTS IN ORDER -->
-  <script src="pb_academy_data.js?v=10.22"></script>
-  <script src="academy_data.js?v=10.22"></script>
-  <script src="replay_scenarios_data.js?v=10.22"></script>
-  <script src="engine.js?v=10.22"></script>
-  <script src="replay_engine.js?v=10.22"></script>
-  <script src="app.js?v=10.22"></script>
+  <script src="pb_academy_data.js?v=10.23"></script>
+  <script src="academy_data.js?v=10.23"></script>
+  <script src="replay_scenarios_data.js?v=10.23"></script>
+  <script src="engine.js?v=10.23"></script>
+  <script src="replay_engine.js?v=10.23"></script>
+  <script src="app.js?v=10.23"></script>
 </body>
 </html>

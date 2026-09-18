@@ -605,6 +605,28 @@
       return this.placeOrder({ type, side, size, price, sl, tp, model: "Touch Execution" });
     }
 
+    cancelPendingOrder(orderId) {
+      const idx = this.account.pendingOrders.findIndex(o => o.id === orderId);
+      if (idx === -1) return null;
+      const order = this.account.pendingOrders.splice(idx, 1)[0];
+      order.status = 'CANCELLED';
+      if (this.onTradeEvent) this.onTradeEvent('ORDER_CANCELLED', order);
+      this.render();
+      this.notifyState();
+      return order;
+    }
+
+    cancelAllPendingOrders() {
+      const orders = [...this.account.pendingOrders];
+      this.account.pendingOrders = [];
+      orders.forEach(order => {
+        order.status = 'CANCELLED';
+        if (this.onTradeEvent) this.onTradeEvent('ORDER_CANCELLED', order);
+      });
+      this.render();
+      this.notifyState();
+    }
+
     processIntrabarOrders(bar) {
       if (!bar) return;
       const pointVal = this.getPointValue();
@@ -1042,6 +1064,29 @@
             this.manualPriceMax = this.panStartPriceMax + priceShift;
           }
 
+          // Dotted crosshair & top time badge sync during pointer pan / drag
+          const visibleCandlesSlice = this.getVisibleCandlesSlice();
+          const { minPrice: pMin, maxPrice: pMax } = this.calculatePriceRange(visibleCandlesSlice);
+          const priceInfo = this.screenToPrice(pos.x, pos.y, pMin, pMax);
+          const slot = Math.floor(pos.x / barWidth);
+          let candle = null;
+          if (visibleCandlesSlice.length > 0) {
+            const rightMargin = Math.max(0, -this.panOffsetBars);
+            const rightSlot = this.visibleBarsCount - 1 - rightMargin;
+            const candleIdx = slot - rightSlot + visibleCandlesSlice.length - 1;
+            if (candleIdx >= 0 && candleIdx < visibleCandlesSlice.length) {
+              candle = visibleCandlesSlice[candleIdx];
+            }
+          }
+          this.cursorPos = {
+            x: pos.x,
+            y: pos.y,
+            price: priceInfo.price,
+            time: candle ? candle.time : priceInfo.time,
+            candle: candle
+          };
+          if (this.onCursorMove) this.onCursorMove(this.cursorPos);
+
           this.requestRender();
           return;
         }
@@ -1256,6 +1301,7 @@
           time: candle ? candle.time : priceInfo.time,
           candle: candle
         };
+        if (this.onCursorMove) this.onCursorMove(this.cursorPos);
 
         // 5. Drawing new shape
         if (this.isDrawing && this.currentShape) {
@@ -1350,6 +1396,7 @@
           this.rafId = null;
         }
         this.cursorPos = null;
+        if (this.onCursorMove) this.onCursorMove(null);
         this.isPinching = false;
         this.isPanning = false;
         this.isDraggingHandle = false;
@@ -1516,7 +1563,23 @@
       }
     }
 
-    findDraggableShapeAt(x, y, minPrice, maxPrice) {
+    isShapeMatchingTool(shapeType, activeTool) {
+      if (!activeTool || activeTool === 'pointer' || activeTool === 'delete') return true;
+      if (activeTool === 'fvg') return shapeType === 'fvg';
+      if (activeTool === 'breaker') return shapeType === 'breaker';
+      if (activeTool === 'ote') return shapeType === 'ote';
+      if (activeTool === 'brush') return shapeType === 'brush';
+      if (activeTool === 'long_pos') return shapeType === 'long_pos';
+      if (activeTool === 'short_pos') return shapeType === 'short_pos';
+      if (activeTool === 'liquidity') return shapeType === 'liquidity';
+      const lineTools = ['trendline', 'line', 'ray', 'h_line', 'h_ray'];
+      if (lineTools.includes(activeTool)) {
+        return lineTools.includes(shapeType) || shapeType === 'trendline';
+      }
+      return shapeType === activeTool;
+    }
+
+    findDraggableShapeAt(x, y, minPrice, maxPrice, filterTool = this.activeTool) {
       // Touch-adaptive hit radius: 26px on iPad/touch glass for easy grabbing, 16px on desktop cursor
       const threshold = this.isTouchDevice ? 26 : 16;
       const allShapes = [...this.drawings];
@@ -1525,6 +1588,10 @@
 
       for (let i = allShapes.length - 1; i >= 0; i--) {
         const shape = allShapes[i];
+
+        // Isolated tool interaction: when in a specific drawing tool, only allow selecting/adjusting
+        // that specific shape type. Never accidentally drag lines or position brackets!
+        if (!this.isShapeMatchingTool(shape.type, filterTool)) continue;
 
         // 1. Long / Short Position Tool
         if (shape.type === 'long_pos' || shape.type === 'short_pos') {
@@ -1561,8 +1628,8 @@
           }
         }
 
-        // 2. FVG Box (Corners, Edges, and Interior Drag)
-        if (shape.type === 'fvg') {
+        // 2. FVG Box or Breaker Block (Corners, Edges, and Interior Drag)
+        if (shape.type === 'fvg' || shape.type === 'breaker') {
           const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
           const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
           const y1 = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
@@ -2282,6 +2349,40 @@
           ctx.fillStyle = isBull ? "#10b981" : "#ef4444";
           ctx.font = "bold 10px monospace";
           ctx.fillText(`+FVG (CE 50%)`, left + 6, midY - 4);
+        } else if (shape.type === 'breaker') {
+          const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
+          const y1 = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
+          const y2 = shape.endPrice != null ? this.priceToY(shape.endPrice, minPrice, maxPrice) : shape.endY;
+
+          const left = Math.min(x1, x2);
+          const right = Math.max(x1, x2);
+          const top = Math.min(y1, y2);
+          const bottom = Math.max(y1, y2);
+          const wBox = Math.max(4, right - left);
+          const hBox = Math.max(2, bottom - top);
+          const isBull = (shape.startPrice != null && shape.endPrice != null)
+            ? (shape.startPrice < shape.endPrice)
+            : (shape.startY > shape.endY);
+
+          ctx.fillStyle = isBull ? "rgba(168, 85, 247, 0.22)" : "rgba(139, 92, 246, 0.22)";
+          ctx.strokeStyle = "#a855f7";
+          ctx.lineWidth = 1.6;
+          ctx.fillRect(left, top, wBox, hBox);
+          ctx.strokeRect(left, top, wBox, hBox);
+
+          const midY = (top + bottom) / 2;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeStyle = "#c084fc";
+          ctx.beginPath();
+          ctx.moveTo(left, midY);
+          ctx.lineTo(right, midY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = "#c084fc";
+          ctx.font = "bold 10px monospace";
+          ctx.fillText(isBull ? `+BB (MT 50%)` : `-BB (MT 50%)`, left + 6, midY - 4);
         } else if (shape.type === 'liquidity') {
           const y = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
           const x1 = shape.startTime != null ? Math.max(0, this.timeToX(shape.startTime, barWidth)) : 0;
@@ -2527,7 +2628,7 @@
 
         // TradingView-style Selection Dots / Handles when shape is selected with Pointer
         if (shape === this.selectedShape && !this.isDrawing) {
-          if (shape.type === 'fvg') {
+          if (shape.type === 'fvg' || shape.type === 'breaker') {
             const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
             const x2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : shape.endX;
             const y1 = shape.startPrice != null ? this.priceToY(shape.startPrice, minPrice, maxPrice) : shape.startY;
@@ -2729,6 +2830,57 @@
           ctx.fillText(`🎯 TP @ ${pos.tp.toFixed(2)}`, 10, yTp - 4);
         }
       });
+
+      // Render Pending Limit Orders
+      if (this.account.pendingOrders && this.account.pendingOrders.length > 0) {
+        this.account.pendingOrders.forEach(order => {
+          const yEntry = this.priceToY(order.entryPrice, minPrice, maxPrice);
+          const color = order.side === 'BUY' ? "#38bdf8" : "#f59e0b";
+
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.4;
+          ctx.setLineDash([5, 3]);
+          ctx.beginPath();
+          ctx.moveTo(0, yEntry);
+          ctx.lineTo(chartWidth, yEntry);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = color;
+          ctx.font = "bold 10px monospace";
+          ctx.fillText(`⏳ LIMIT ${order.side} ${order.size}x @ ${order.entryPrice.toFixed(2)}`, 10, yEntry - 4);
+
+          if (order.sl) {
+            const ySl = this.priceToY(order.sl, minPrice, maxPrice);
+            ctx.strokeStyle = "rgba(239, 68, 68, 0.6)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(0, ySl);
+            ctx.lineTo(chartWidth, ySl);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#ef4444";
+            ctx.font = "10px monospace";
+            ctx.fillText(`⏳ SL @ ${order.sl.toFixed(2)}`, 10, ySl - 4);
+          }
+
+          if (order.tp) {
+            const yTp = this.priceToY(order.tp, minPrice, maxPrice);
+            ctx.strokeStyle = "rgba(16, 185, 129, 0.6)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(0, yTp);
+            ctx.lineTo(chartWidth, yTp);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#10b981";
+            ctx.font = "10px monospace";
+            ctx.fillText(`⏳ TP @ ${order.tp.toFixed(2)}`, 10, yTp - 4);
+          }
+        });
+      }
     }
 
     renderAxes(ctx, w, h, chartWidth, chartHeight, minPrice, maxPrice, visibleCandles, barWidth) {
