@@ -3843,17 +3843,16 @@ function setupTouchUIManager(engine) {
   }
 
   function renderTouchFavoriteStrip() {
-    if (!touchFavStrip) return;
     const favs = getFavoriteTools();
 
-    // Update stars on grid
+    // 1. Update stars on tools grid
     document.querySelectorAll('.touch-tool-star-btn').forEach(starBtn => {
       const tool = starBtn.getAttribute('data-star-tool');
       const isFav = favs.includes(tool);
       starBtn.classList.toggle('starred', isFav);
     });
 
-    touchFavStrip.innerHTML = favs.map(tool => {
+    const generateChipsHtml = () => favs.map(tool => {
       const meta = TOOL_METADATA[tool] || { icon: '✏️', label: tool };
       const isActive = engine.activeTool === tool;
       return `
@@ -3864,17 +3863,44 @@ function setupTouchUIManager(engine) {
       `;
     }).join('');
 
-    touchFavStrip.querySelectorAll('.touch-fav-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
+    // 2. Render in Touch Tools Sheet
+    if (touchFavStrip) {
+      touchFavStrip.innerHTML = generateChipsHtml();
+    }
+
+    // 3. Render directly above Play & Rewind in Touch Replay Bar
+    const touchFavDockChips = document.getElementById('touchFavDockChips');
+    if (touchFavDockChips) {
+      touchFavDockChips.innerHTML = generateChipsHtml();
+    }
+
+    // Wire clicks on all favorite chips across both locations
+    document.querySelectorAll('[data-fav-select]').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const tool = chip.getAttribute('data-fav-select');
         if (tool) {
           engine.setTool(tool);
           touchToolTiles.forEach(t => t.classList.toggle('active', t.getAttribute('data-tool') === tool));
           renderTouchFavoriteStrip();
           closeAllTouchSheets();
-          showToast(`✏️ ${tool.toUpperCase()} Active`);
+          if (tool === 'delete') {
+            showToast("❌ Delete Tool Active • Tap any drawing to delete it");
+          } else {
+            showToast(`✏️ ${tool.toUpperCase()} Active`);
+          }
         }
       });
+    });
+  }
+
+  // Wire '+' button in favorite dock to open tools sheet
+  const touchFavDockAddBtn = document.getElementById('touchFavDockAddBtn');
+  if (touchFavDockAddBtn) {
+    touchFavDockAddBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTouchSheet(touchToolsSheet);
     });
   }
 
