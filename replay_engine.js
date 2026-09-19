@@ -1124,15 +1124,24 @@
             shape.slPrice = priceInfo.price;
           } else if (handleType === 'entry') {
             shape.entryPrice = priceInfo.price;
-          } else if (handleType === 'resize_width') {
-            shape.endTime = curTime;
-            shape.endX = Math.max(shape.startX + 60, pos.x);
+          } else if (handleType === 'pos_right' || handleType === 'resize_width') {
+            const minBarSec = this.getBarSeconds();
+            const minTime = (shape.startTime != null ? shape.startTime : this.xToTime(shape.startX)) + minBarSec;
+            shape.endTime = Math.max(minTime, curTime);
+            shape.endX = pos.x;
+          } else if (handleType === 'pos_left') {
+            const minBarSec = this.getBarSeconds();
+            const maxTime = (shape.endTime != null ? shape.endTime : this.xToTime(shape.endX)) - minBarSec;
+            shape.startTime = Math.min(maxTime, curTime);
+            shape.startX = pos.x;
           } else if (handleType === 'move_all') {
             shape.entryPrice = parseFloat((snap.entryPrice + priceDelta).toFixed(2));
             shape.tpPrice = parseFloat((snap.tpPrice + priceDelta).toFixed(2));
             shape.slPrice = parseFloat((snap.slPrice + priceDelta).toFixed(2));
             if (snap.startTime != null) shape.startTime = snap.startTime + startTimeDelta;
+            else if (snap.startX != null) shape.startTime = this.xToTime(snap.startX) + startTimeDelta;
             if (snap.endTime != null) shape.endTime = snap.endTime + startTimeDelta;
+            else if (snap.endX != null) shape.endTime = this.xToTime(snap.endX) + startTimeDelta;
             shape.startX = snap.startX + dx;
             shape.endX = snap.endX + dx;
           } else if (handleType === 'fvg_top') {
@@ -1264,7 +1273,7 @@
             const ht = hit.handleType;
             if (ht === 'fvg_top' || ht === 'fvg_bottom' || ht === 'tp' || ht === 'sl' || ht === 'entry' || ht === 'move_liq' || ht === 'liquidity_text') {
               this.canvas.style.cursor = 'ns-resize';
-            } else if (ht === 'fvg_left' || ht === 'fvg_right' || ht === 'resize_width') {
+            } else if (ht === 'fvg_left' || ht === 'fvg_right' || ht === 'resize_width' || ht === 'pos_left' || ht === 'pos_right') {
               this.canvas.style.cursor = 'ew-resize';
             } else if (ht === 'fvg_top_left' || ht === 'fvg_bot_right') {
               this.canvas.style.cursor = 'nwse-resize';
@@ -1367,6 +1376,14 @@
           } else if (finishedShape.type === 'long_pos' || finishedShape.type === 'short_pos') {
             if (Math.abs(finishedShape.endTime - finishedShape.startTime) < barSec * 0.5) {
               finishedShape.endTime = finishedShape.startTime + barSec * 12;
+            }
+            if (finishedShape.startTime > finishedShape.endTime) {
+              const tmpT = finishedShape.startTime;
+              finishedShape.startTime = finishedShape.endTime;
+              finishedShape.endTime = tmpT;
+              const tmpX = finishedShape.startX;
+              finishedShape.startX = finishedShape.endX;
+              finishedShape.endX = tmpX;
             }
           } else if (finishedShape.type === 'trendline' || finishedShape.type === 'liquidity') {
             if (Math.abs(finishedShape.endX - finishedShape.startX) < 20) {
@@ -1603,27 +1620,41 @@
           const yEntry = this.priceToY(entryPrice, minPrice, maxPrice);
           const yTp = this.priceToY(tpPrice, minPrice, maxPrice);
           const ySl = this.priceToY(slPrice, minPrice, maxPrice);
-          const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
-          const x2 = shape.endTime != null ? Math.max(x1 + 60, this.timeToX(shape.endTime, barWidth)) : Math.max(shape.startX + 140, shape.endX);
+          const rawX1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const rawX2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : (shape.endX || rawX1 + 150);
+          const xLeft = Math.min(rawX1, rawX2);
+          const xRight = Math.max(xLeft + 25, Math.max(rawX1, rawX2));
+          const yTop = Math.min(yTp, ySl);
+          const yBottom = Math.max(yTp, ySl);
+          const sideThreshold = Math.max(threshold, 24);
 
-          // Check TP Handle
-          if (x >= x1 - 10 && x <= x2 + 20 && Math.abs(y - yTp) <= threshold) {
+          // 1. Right Side Edge / Handle (Drag to widen/narrow right side)
+          if (Math.abs(x - xRight) <= sideThreshold && y >= yTop - 12 && y <= yBottom + 12) {
+            return { shape, handleType: 'pos_right' };
+          }
+
+          // 2. Left Side Edge / Handle (Drag to widen/narrow left side)
+          if (Math.abs(x - xLeft) <= sideThreshold && y >= yTop - 12 && y <= yBottom + 12) {
+            return { shape, handleType: 'pos_left' };
+          }
+
+          // 3. Center TP Handle / Line
+          if (Math.abs(y - yTp) <= threshold && x >= xLeft - 6 && x <= xRight + 6) {
             return { shape, handleType: 'tp' };
           }
-          // Check SL Handle
-          if (x >= x1 - 10 && x <= x2 + 20 && Math.abs(y - ySl) <= threshold) {
+
+          // 4. Center SL Handle / Line
+          if (Math.abs(y - ySl) <= threshold && x >= xLeft - 6 && x <= xRight + 6) {
             return { shape, handleType: 'sl' };
           }
-          // Check Entry Handle
-          if (x >= x1 - 10 && x <= x2 + 20 && Math.abs(y - yEntry) <= threshold) {
+
+          // 5. Center Entry Handle / Line
+          if (Math.abs(y - yEntry) <= threshold && x >= xLeft - 6 && x <= xRight + 6) {
             return { shape, handleType: 'entry' };
           }
-          // Check Box Right Edge (Resize width)
-          if (Math.abs(x - x2) <= threshold && y >= Math.min(yTp, ySl) - 5 && y <= Math.max(yTp, ySl) + 5) {
-            return { shape, handleType: 'resize_width' };
-          }
-          // Clicked anywhere inside the position box -> MOVE ENTIRE BRACKET!
-          if (x >= x1 && x <= x2 && y >= Math.min(yTp, ySl) && y <= Math.max(yTp, ySl)) {
+
+          // 6. Clicked anywhere inside the position box -> MOVE ENTIRE BRACKET!
+          if (x >= xLeft && x <= xRight && y >= yTop && y <= yBottom) {
             return { shape, handleType: 'move_all' };
           }
         }
@@ -2524,8 +2555,11 @@
           const yTp = this.priceToY(tpPrice, minPrice, maxPrice);
           const ySl = this.priceToY(slPrice, minPrice, maxPrice);
 
-          const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
-          const x2 = shape.endTime != null ? Math.max(x1 + 60, this.timeToX(shape.endTime, barWidth)) : Math.max(x1 + 150, shape.endX);
+          const rawX1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+          const rawX2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : (shape.endX || rawX1 + 150);
+          const x1 = Math.min(rawX1, rawX2);
+          const x2 = Math.max(x1 + 30, Math.max(rawX1, rawX2));
+          const midX = (x1 + x2) / 2;
 
           const riskPts = Math.abs(entryPrice - slPrice);
           const rewardPts = Math.abs(tpPrice - entryPrice);
@@ -2555,29 +2589,50 @@
           ctx.lineTo(x2, yEntry);
           ctx.stroke();
 
-          // Interactive Drag Handles (Circles)
-          // 1. TP Handle
+          // Interactive Drag Handles (TradingView Style)
+          // 1. Center TP Handle
           ctx.fillStyle = "#10b981";
           ctx.beginPath();
-          ctx.arc(x2, yTp, 6, 0, Math.PI * 2);
+          ctx.arc(midX, yTp, 5.5, 0, Math.PI * 2);
           ctx.fill();
-          ctx.strokeStyle = "#fff";
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1.5;
           ctx.stroke();
 
-          // 2. SL Handle
+          // 2. Center SL Handle
           ctx.fillStyle = "#ef4444";
           ctx.beginPath();
-          ctx.arc(x2, ySl, 6, 0, Math.PI * 2);
+          ctx.arc(midX, ySl, 5.5, 0, Math.PI * 2);
           ctx.fill();
-          ctx.strokeStyle = "#fff";
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1.5;
           ctx.stroke();
 
-          // 3. Entry Handle
+          // 3. Center Entry Handle
           ctx.fillStyle = "#38bdf8";
+          ctx.beginPath();
+          ctx.arc(midX, yEntry, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // 4. Right Side Drag Handle (Widen / Narrow)
+          ctx.fillStyle = "#ffffff";
           ctx.beginPath();
           ctx.arc(x2, yEntry, 6, 0, Math.PI * 2);
           ctx.fill();
-          ctx.strokeStyle = "#fff";
+          ctx.strokeStyle = "#0284c7";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // 5. Left Side Drag Handle (Widen / Narrow)
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(x1, yEntry, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#0284c7";
+          ctx.lineWidth = 2;
           ctx.stroke();
 
           // Info Badges on Chart
@@ -2679,12 +2734,15 @@
             const yEntry = this.priceToY(entryPrice, minPrice, maxPrice);
             const yTp = this.priceToY(tpPrice, minPrice, maxPrice);
             const ySl = this.priceToY(slPrice, minPrice, maxPrice);
-            const x1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
-            const x2 = shape.endTime != null ? Math.max(x1 + 60, this.timeToX(shape.endTime, barWidth)) : Math.max(shape.startX + 140, shape.endX);
+            const rawX1 = shape.startTime != null ? this.timeToX(shape.startTime, barWidth) : shape.startX;
+            const rawX2 = shape.endTime != null ? this.timeToX(shape.endTime, barWidth) : (shape.endX || rawX1 + 150);
+            const x1 = Math.min(rawX1, rawX2);
+            const x2 = Math.max(x1 + 30, Math.max(rawX1, rawX2));
             const midPos = (x1 + x2) / 2;
             this.renderSelectionHandle(ctx, midPos, yTp);
             this.renderSelectionHandle(ctx, midPos, ySl);
             this.renderSelectionHandle(ctx, midPos, yEntry);
+            this.renderSelectionHandle(ctx, x1, yEntry);
             this.renderSelectionHandle(ctx, x2, yEntry);
           } else if (shape.type === 'brush' && shape.points && shape.points.length > 0) {
             const pFirst = shape.points[0];
